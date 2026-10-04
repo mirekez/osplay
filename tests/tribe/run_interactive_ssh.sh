@@ -4,7 +4,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 multicore=()
 simulator_backend=()
-tap="${TRIBE_INTERACTIVE_TAP:-tap-tribe}"
+tap="${TRIBE_INTERACTIVE_TAP:-${MIKOS_TAP:-$(python3 "$root/tests/network/tap.py" --select-tap)}}"
 guest_address="${TRIBE_INTERACTIVE_GUEST_ADDRESS:-192.168.76.2}"
 host_address="${TRIBE_INTERACTIVE_HOST_ADDRESS:-192.168.76.1}"
 guest_port="${TRIBE_INTERACTIVE_SSH_PORT:-22}"
@@ -25,7 +25,7 @@ if [[ "$quiet" != 0 && "$quiet" != 1 ]]; then
 fi
 
 if [[ "${MIKOS_TRIBE_SSH_NETNS_ENTERED:-0}" != 1 &&
-      -z "${TRIBE_ETH_TAP_SOCKET:-}" ]]; then
+      -z "${TRIBE_ETH_TAP_SOCKET:-}${MIKOS_TAP_SOCKET:-}" ]]; then
   exec unshare -Urn env MIKOS_TRIBE_SSH_NETNS_ENTERED=1 "$0" "$@"
 fi
 
@@ -71,7 +71,7 @@ log="$runtime/uart.log"
 ssh_log="$runtime/ssh.log"
 bridge_log="$runtime/bridge.log"
 rootfs="$runtime/rootfs.ext4"
-tap_socket="${TRIBE_ETH_TAP_SOCKET:-$runtime/tribe-ethgig.sock}"
+tap_socket="${TRIBE_ETH_TAP_SOCKET:-${MIKOS_TAP_SOCKET:-$runtime/tribe-ethgig.sock}}"
 cp --reflink=auto "$root/build/tests/busybox/rootfs.ext4" "$rootfs"
 mkfifo "$input"
 exec 3<>"$input"
@@ -134,6 +134,7 @@ if [[ ! -S "$tap_socket" ]] || ! ip link show dev "$tap" >/dev/null 2>&1; then
   exit 1
 fi
 if [[ -n "${bridge_pid:-}" ]]; then
+  ip neigh replace "$guest_address" lladdr "${TRIBE_INTERACTIVE_GUEST_MAC:-02:00:00:00:00:02}" nud permanent dev "$tap"
   # A private TAP needs only the test IPv4 subnet. Suppress automatic IPv6
   # multicast traffic, which otherwise competes with SSH in Tribe's bounded
   # real-time-to-simulated-time RX queue.

@@ -6,8 +6,8 @@ simulator_name="tribe64"
 kernel="$root/build/mikos-tribe-interactive-rv32.elf"
 kernel_target="tribe-interactive-kernel"
 cycles="${TRIBE_INTERACTIVE_CYCLES:-0}"
-tap_socket="${TRIBE_ETH_TAP_SOCKET:-/tmp/tribe-ethgig.sock}"
-tap_name="${TRIBE_INTERACTIVE_TAP:-tap-tribe}"
+tap_socket="${TRIBE_ETH_TAP_SOCKET:-${MIKOS_TAP_SOCKET:-/tmp/mikos-tap.sock}}"
+tap_name="${TRIBE_INTERACTIVE_TAP:-${MIKOS_TAP:-}}"
 host_address="${TRIBE_INTERACTIVE_HOST_ADDRESS:-192.168.76.1}"
 guest_address="${TRIBE_INTERACTIVE_GUEST_ADDRESS:-192.168.76.2}"
 guest_mac="${TRIBE_INTERACTIVE_GUEST_MAC:-02:00:00:00:00:02}"
@@ -61,6 +61,12 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+if [[ -z "$test_mode" ]]; then
+  if [[ -z "$tap_name" ]]; then tap_name="$(python3 "$root/tests/network/tap.py" --select-tap --host "$host_address")"; fi
+  python3 "$root/tests/network/tap.py" tribe --tap "$tap_name" --socket "$tap_socket" \
+    --host "$host_address" --guest "$guest_address" --mac "$guest_mac"
+fi
 
 if [[ -z "${CPPHDL_HOME:-}" ]]; then
   echo 'Set CPPHDL_HOME to your cpphdl checkout (export CPPHDL_HOME="$HOME/cpphdl").' >&2

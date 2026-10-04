@@ -7,7 +7,8 @@ ROOT := $(abspath ../..)
 # should replace our output directory.
 BUILD := $(ROOT)/build/tests/busybox
 include $(ROOT)/support/toolchain.mk
-LLVM_READELF := $(ROOT)/.conda/bin/llvm-readelf
+CONDA ?= $(if $(strip $(CONDA_PREFIX)),$(CONDA_PREFIX),$(ROOT)/.conda)/bin
+LLVM_READELF := $(CONDA)/llvm-readelf
 JOBS ?= 4
 MKE2FS ?= /usr/sbin/mke2fs
 E2FSCK ?= /usr/sbin/e2fsck
@@ -41,6 +42,7 @@ DROPBEAR_ADDRESS := 0x81400000
 DROPBEAR_HOST_OUT := $(BUILD)/dropbear-host
 DROPBEAR_HOST_STAMP := $(DROPBEAR_HOST_OUT)/.built
 DROPBEAR_HOST_KEY := $(ROOT)/build/mikos_ssh_key
+DROPBEAR_TEST_KEY := keys/mikos_ssh_key
 DROPBEAR_PUBLIC_KEY := $(DROPBEAR_HOST_KEY).pub
 DROPBEAR_CLIENT_KEY := $(DROPBEAR_HOST_OUT)/mikos_ssh_key.dropbear
 
@@ -65,7 +67,7 @@ all: rootfs
 
 payloads: rootfs
 
-rootfs: $(ROOTFS_IMAGE) $(DROPBEAR_HOST_STAMP)
+rootfs: $(ROOTFS_IMAGE) $(DROPBEAR_CLIENT_KEY)
 
 busybox: $(BUSYBOX)
 
@@ -132,16 +134,17 @@ $(DROPBEAR_HOST_STAMP): $(DROPBEAR) $(DROPBEAR_CONFIG) \
 		$(JOBS) $(DROPBEAR_CONFIG)
 
 $(DROPBEAR_CLIENT_KEY): $(DROPBEAR_HOST_STAMP) $(DROPBEAR_HOST_KEY)
-	@tmp="$@.tmp.$$$$"; \
+	@set -e; tmp="$@.tmp.$$$$"; \
 	trap 'rm -f "$$tmp"' EXIT; \
 	$(DROPBEAR_HOST_OUT)/dropbearconvert openssh dropbear \
 		$(DROPBEAR_HOST_KEY) "$$tmp"; \
 	chmod 0600 "$$tmp"; \
 	mv -f "$$tmp" '$@'
 
-$(DROPBEAR_HOST_KEY):
+# Keep existing local identities; install the public regression fixture on a clean build.
+$(DROPBEAR_HOST_KEY): | $(DROPBEAR_TEST_KEY)
 	@mkdir -p $(@D)
-	ssh-keygen -q -t ed25519 -N '' -C mikos-local-test -f '$@'
+	install -m 0600 '$(DROPBEAR_TEST_KEY)' '$@'
 
 $(DROPBEAR_PUBLIC_KEY): $(DROPBEAR_HOST_KEY)
 	ssh-keygen -y -f '$<' > '$@'

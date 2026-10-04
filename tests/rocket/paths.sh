@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+chipyard="$(cd "$root/tests/rocket/chipyard" && pwd -P)"
+envdir="${CHIPYARD_ENV:-$chipyard/.conda-env}"
+build="$root/build/tests/rocket"
+kernel="$root/build/mikos-rocket-rv32.elf"
+simulator="$chipyard/sims/verilator/simulator-chipyard.harness-MikosRocketConfig"
+host_clang="${MIKOS_CXX:-$HOME/cpphdl/.conda/bin/clang++}"
+readelf="${MIKOS_READELF:-$(dirname "$host_clang")/llvm-readelf}"
+mkdir -p "$build"

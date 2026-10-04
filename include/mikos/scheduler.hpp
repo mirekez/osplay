@@ -1,6 +1,9 @@
 #pragma once
 
 #include <mikos/base.hpp>
+#ifdef MIKOS_EXTREME_USERSPACE
+#include <context/context.h>
+#endif
 
 namespace mikos {
 
@@ -10,9 +13,18 @@ struct TrapFrame {
   u32 mstatus;
   u32 mcause;
   u32 mtval;
+#ifdef MIKOS_EXTREME_USERSPACE
+  ExtremeContext context;
+  bool extreme_start;
+  bool extreme_retry;
+  u32 extreme_signal_handler;
+  u32 extreme_signal_number;
+#endif
 };
 
+#ifndef MIKOS_EXTREME_USERSPACE
 static_assert(sizeof(TrapFrame) == 36 * sizeof(u32));
+#endif
 
 struct Scheduler {
   u32 next_entry{};

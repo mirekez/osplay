@@ -1,4 +1,5 @@
 /.conda
 /build
+__pycache__/
 /out.txt
 /tests/tribe/out.txt

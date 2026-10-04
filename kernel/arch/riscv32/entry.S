@@ -6,6 +6,15 @@ _start:
   li t0, 8
   csrc mstatus, t0
 
+#ifdef MIKOS_ROCKET
+  /* Rocket does not reset delegation CSRs. mikOS handles U-mode traps in M. */
+  csrw medeleg, zero
+  csrw mideleg, zero
+  li t0, 7
+  csrw mcounteren, t0
+  csrw scounteren, t0
+#endif
+
 #ifdef MIKOS_TRIBE
   /* MikOS currently schedules on the boot hart. Keep additional Tribe harts
      from racing through the shared BSS, stack, and device initialization. */
@@ -15,6 +24,7 @@ _start:
 #endif
 
   la sp, __kernel_stack_top
+  csrw mscratch, sp
 
   la t0, __bss_begin
   la t1, __bss_end
@@ -39,6 +49,9 @@ _start:
 .global enter_user
 .type enter_user, @function
 enter_user:
+#ifdef MIKOS_ROCKET
+  fence.i
+#endif
   csrw mepc, a0
   la t0, __kernel_stack_top
   csrw mscratch, t0
@@ -46,7 +59,7 @@ enter_user:
   csrr t0, mstatus
   li t1, ~(3 << 11)
   and t0, t0, t1
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
   li t1, (1 << 7)
   or t0, t0, t1
 #else

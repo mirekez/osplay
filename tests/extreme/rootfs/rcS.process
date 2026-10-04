@@ -1,0 +1,25 @@
+#!/bin/sh
+set -e
+exec 10>&1
+echo MIKOS_FD10_CHILD | cat >&10
+echo MIKOS_FD10_PARENT >&10
+printf 'MIKOS_THREE_STAGE\n' | cat | cat
+A=parent
+export A
+sh -c 'A=child; test "$A" = child'
+test "$A" = parent
+echo MIKOS_ADDR_parent
+set +e
+sh -c 'exit 7'
+status=$?
+set -e
+test "$status" = 7
+echo MIKOS_WAIT_7
+sh -c 'ls /'
+echo MIKOS_NESTED_LS_0
+test "$(printf '%0.2f' 1.25)" = 1.25
+echo MIKOS_FLOAT64_OK
+trap 'echo MIKOS_SIGNAL_OK' USR1
+kill -USR1 $$
+echo MIKOS_PROCESS_OK
+exit 0

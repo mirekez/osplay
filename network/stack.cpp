@@ -792,7 +792,11 @@ class BootstrapStack {
   }
 
   void announce_address() const {
-    write_text("MIKOS:NET_IP 10.0.2.15\n");
+    write_text("MIKOS:NET_IP ");
+    for (u32 i = 0; i < 4; ++i) {
+      write_u32(state_.address.octet[i]);
+      uart_put(i == 3 ? '\n' : '.');
+    }
     write_text("MIKOS:NET_MAC ");
     constexpr char hex[] = "0123456789abcdef";
     for (u32 i = 0; i < 6; ++i) {

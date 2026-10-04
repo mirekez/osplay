@@ -2,7 +2,7 @@ SHELL := /bin/bash
 
 ROOT := $(CURDIR)
 BUILD := $(ROOT)/build
-CONDA := $(ROOT)/.conda/bin
+CONDA ?= $(if $(strip $(CONDA_PREFIX)),$(CONDA_PREFIX),$(ROOT)/.conda)/bin
 CXX := $(CONDA)/clang++
 LLVM_READELF := $(CONDA)/llvm-readelf
 include support/toolchain.mk
@@ -10,6 +10,10 @@ LD := $(RISCV_PREFIX)ld
 OBJCOPY := $(RISCV_PREFIX)objcopy
 
 .DEFAULT_GOAL := all
+.PHONY: mikos-tap
+mikos-tap:
+	bash tests/network/build_tap.sh
+tribe-tap extreme-tap: mikos-tap
 include support/kernel-cxx/flags.mk
 
 RV_FLAGS = --target=riscv32-unknown-elf -march=rv32ima_zicsr -mabi=ilp32 \
@@ -70,7 +74,7 @@ TRIBE_KERNEL_OBJECTS := \
 	$(patsubst %.cpp,$(BUILD)/tribe/%.o,$(filter %.cpp,$(TRIBE_KERNEL_SOURCES))) \
 	$(patsubst %.S,$(BUILD)/tribe/%.o,$(filter %.S,$(TRIBE_KERNEL_SOURCES)))
 TRIBE_KERNEL_DEPS := $(TRIBE_KERNEL_OBJECTS:.o=.d)
-TRIBE_INTERACTIVE_RV_FLAGS = $(TRIBE_RV_FLAGS) -DMIKOS_TRIBE_INTERACTIVE
+TRIBE_INTERACTIVE_RV_FLAGS = $(TRIBE_RV_FLAGS) -DMIKOS_TRIBE_INTERACTIVE -DMIKOS_INTERACTIVE
 TRIBE_INTERACTIVE_ELF := $(BUILD)/mikos-tribe-interactive-rv32.elf
 TRIBE_INTERACTIVE_MAP := $(BUILD)/mikos-tribe-interactive-rv32.map
 TRIBE_INTERACTIVE_OBJECTS := \
@@ -103,7 +107,9 @@ TRIBE_KERNEL_OBJECTS += $(KERNEL_SOFTFLOAT_OBJECTS)
 TRIBE_INTERACTIVE_OBJECTS += $(KERNEL_SOFTFLOAT_OBJECTS)
 TRIBE_INTERACTIVE_MULTICORE_OBJECTS += $(KERNEL_SOFTFLOAT_OBJECTS)
 
-$(BUILD)/kernel/softfloat/%.o: $(KERNEL_CXX_READY)
+# Limit this recipe to real objects: a generic rule lets Make try to rebuild
+# included *.d files via *.d.o, inventing compiler-rt sources named *.d.c.
+$(KERNEL_SOFTFLOAT_OBJECTS): $(BUILD)/kernel/softfloat/%.o: $(KERNEL_CXX_READY)
 	@mkdir -p $(@D)
 	$(CXX) $(filter-out -std=c++2c,$(TRIBE_RV_FLAGS)) -x c -std=c11 \
 	  -c $(KERNEL_CXX_BUILTINS)/$*.c -o $@
@@ -138,7 +144,7 @@ QEMU := $(BUILD)/qemu/qemu-system-riscv32
 NET_PEER := $(BUILD)/tests/qemu/net_peer
 ETHGIG_TAP := $(BUILD)/tests/qemu/ethgig_tap
 TRIBE_NET_PEER := $(BUILD)/tests/tribe/net_peer
-CPPHDL_HOME ?=
+CPPHDL_HOME ?= $(HOME)/cpphdl
 export CPPHDL_HOME
 CPPHDL_TAP := $(BUILD)/tests/tribe/ethgig_tap
 
@@ -148,7 +154,7 @@ CPPHDL_TAP := $(BUILD)/tests/tribe/ethgig_tap
 	tribe-interactive tribe-interactive-ping-test \
 	tribe-interactive-tcp-test tribe-interactive-process-test \
 	tribe-interactive-ssh-test ethgig-tap clean
-.PHONY: tribe-boot-test tribe-kernel-test tribe-all-tests tribe-tap tribe-peer-test
+.PHONY: tribe-boot-test tribe-kernel-test tribe-all-tests tribe-tap tap-tribe tribe-peer-test
 
 all: test kernel
 
@@ -327,6 +333,8 @@ tribe-boot-test: tribe-prepare tribe-kernel
 tribe-all-tests:
 	bash tests/tribe/run_all.sh
 
+tap-tribe: tribe-tap
+
 tribe-tap:
 	@test -f '$(CPPHDL_HOME)/tribe_cpu/linux/net/ethgig_tap.cpp' || { \
 		echo 'Set CPPHDL_HOME to your current cpphdl checkout (export CPPHDL_HOME=$$HOME/cpphdl).' >&2; exit 1; }
@@ -401,3 +409,45 @@ clean:
 
 -include $(KERNEL_DEPS) $(TRIBE_KERNEL_DEPS) $(TRIBE_INTERACTIVE_DEPS) \
 	$(TRIBE_INTERACTIVE_MULTICORE_DEPS)
+
+# Extreme uses its own instruction set and compiler; no RV32 ELF is loaded.
+include support/rocket/targets.mk
+
+.PHONY: extreme-prepare extreme-boot-test extreme-kernel-test extreme-all-tests extreme-peer-test
+extreme-prepare:
+	bash tests/extreme/prepare_cpphdl.sh
+
+extreme-boot-test:
+	bash tests/extreme/run_boot.sh
+
+extreme-kernel-test:
+	bash tests/extreme/run_kernel.sh
+
+extreme-all-tests:
+	bash tests/extreme/run_all.sh
+
+extreme-peer-test: extreme-prepare
+	bash tests/extreme/run_peer_test.sh
+
+.PHONY: extreme-tap
+
+.PHONY: extreme-userspace-prepare extreme-interactive \
+        extreme-interactive-ping-test extreme-interactive-process-test \
+        extreme-interactive-tcp-test extreme-interactive-ssh-test
+extreme-userspace-prepare:
+	bash support/extreme/prepare.sh
+
+extreme-interactive:
+	python3 tests/extreme/userspace.py $(EXTREME_TEST_FLAGS)
+
+extreme-interactive-ping-test:
+	python3 tests/extreme/userspace.py --test ping $(EXTREME_TEST_FLAGS)
+
+extreme-interactive-process-test:
+	python3 tests/extreme/userspace.py --test process $(EXTREME_TEST_FLAGS)
+
+extreme-interactive-tcp-test:
+	python3 tests/extreme/userspace.py --test tcp $(EXTREME_TEST_FLAGS)
+
+extreme-interactive-ssh-test:
+	python3 tests/extreme/userspace.py --test ssh $(EXTREME_TEST_FLAGS)

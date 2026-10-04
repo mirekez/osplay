@@ -10,13 +10,18 @@ inline constexpr u32 mtime = 0x8200c0f8;
 inline constexpr u32 mtimecmp = 0x02004000;
 inline constexpr u32 mtime = 0x0200bff8;
 #endif
-#if defined(MIKOS_TRIBE) && defined(MIKOS_TRIBE_INTERACTIVE)
+#if defined(MIKOS_INTERACTIVE)
 // The cycle-accurate Tribe model advances far more slowly than wall time, so
 // switch to frequent polling only while a background network service is
 // parked. A 500-tick interval combined with the former eight-poll handler
 // caused a permanent interrupt storm before BusyBox's first syscall.
+#ifdef MIKOS_ROCKET
+inline constexpr u32 normal_quantum_ticks = 5'000;
+inline constexpr u32 network_quantum_ticks = 1'000;
+#else
 inline constexpr u32 normal_quantum_ticks = 50'000;
 inline constexpr u32 network_quantum_ticks = 5'000;
+#endif
 u32 quantum_ticks = normal_quantum_ticks;
 #else
 inline constexpr u32 quantum_ticks = 200'000;  // 20 ms at QEMU's 10 MHz.
@@ -62,7 +67,7 @@ void rearm_scheduler_timer() {
 void start_scheduler_timer() {
   rearm_scheduler_timer();
   constexpr u32 machine_timer_enable = 1u << 7;
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#if defined(MIKOS_TRIBE) && defined(MIKOS_INTERACTIVE)
   // Tribe exposes CLINT timer pending as STIP while the CPU is outside
   // M-mode, including MikOS user mode. Enable both forms so the same timer
   // continues across privilege transitions.
@@ -75,7 +80,7 @@ void start_scheduler_timer() {
 }
 
 void set_network_timer_waiting(bool waiting) {
-#if defined(MIKOS_TRIBE) && defined(MIKOS_TRIBE_INTERACTIVE)
+#if defined(MIKOS_INTERACTIVE)
   quantum_ticks = waiting ? network_quantum_ticks : normal_quantum_ticks;
   rearm_scheduler_timer();
 #else
@@ -85,7 +90,13 @@ void set_network_timer_waiting(bool waiting) {
 
 u64 time_ticks() {
   const auto value = read_time();
-  return (static_cast<u64>(value.high) << 32) | value.low;
+  const u64 ticks = (static_cast<u64>(value.high) << 32) | value.low;
+#ifdef MIKOS_ROCKET
+  // 50 MHz PBUS / 1000 RTC divider; shared kernel timers use 10 MHz units.
+  return ticks * 200;
+#else
+  return ticks;
+#endif
 }
 
 }  // namespace mikos::arch

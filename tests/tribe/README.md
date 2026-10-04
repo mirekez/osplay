@@ -72,19 +72,24 @@ run `make userspace-toolchain` from the repository root first; see
 kernel is involved. The launcher checks this prerequisite before building
 the simulator.
 
-With `CPPHDL_HOME` set, build the checkout's own bridge source from
-`tribe_cpu/linux/net/ethgig_tap.cpp` and start it in the background from the
-repository root, in the same terminal:
+Build the shared bridge and start it in the background from the repository root.
+`make mikos-tap` builds only the shared helper; the legacy Tribe targets also
+build the checkout's own bridge for explicitly customized configurations.
+The Makefile defaults `CPPHDL_HOME` to `~/cpphdl` and uses the active Conda
+environment (`CONDA_PREFIX`), falling back to `~/mikos/.conda` when none is active.
+An external environment such as `~/cpphdl/.conda` works without a local copy.
+Override `CPPHDL_HOME`, `CONDA` (the environment's `bin` directory), or `CXX` on
+the make command line if needed. `tap-tribe` and `tribe-tap` are equivalent:
 
 ```sh
-make tribe-tap
+make tap-tribe
 sudo bash tests/tribe/start_tap.sh --background
 tests/tribe/tribe_interactive.sh --multicore
 ```
 
-The setup wrapper configures `tap-tribe`, host `192.168.76.1/24`, the permanent
+The setup wrapper configures `tap-mikos`, host `192.168.76.1/24`, the permanent
 neighbor entry for guest `192.168.76.2`, and socket ownership. It returns after
-the socket is ready, prints the log path (`build/tests/tribe/tap.log`) and a
+the socket is ready, prints the log path (`build/tests/network/tap.log`) and a
 `sudo kill -- PID` stop command, and leaves the bridge running independently
 of the simulator. No separate `ip neigh` command or second terminal is needed.
 Host and guest share a subnet, so no gateway is needed between them. Omit
@@ -94,8 +99,9 @@ Run the interactive launcher as your normal user. Only TAP setup needs sudo;
 `sudo ./tribe_interactive.sh` normally drops `CPPHDL_HOME` and other exported
 build settings. No Linux guest kernel is involved.
 
-Start a bridge only if one is not already running. The wrapper refuses to
-replace an existing socket. The missing-socket hint prints the background
+Default shared setup reuses an existing live bridge and repairs its addresses
+and neighbor entries; it refuses stale sockets. Explicit legacy setup refuses
+to replace an existing socket. The missing-socket hint prints the background
 setup commands with any selected network overrides passed explicitly through
 sudo. When setting up a custom socket manually, for example:
 
@@ -105,9 +111,9 @@ sudo env TRIBE_ETH_TAP_SOCKET=/tmp/my-tribe.sock \
 tests/tribe/tribe_interactive.sh --multicore --tap-socket /tmp/my-tribe.sock
 ```
 
-The TAP bridge socket defaults to `/tmp/tribe-ethgig.sock`. Set
+The TAP bridge socket defaults to `/tmp/mikos-tap.sock`. Set
 `TRIBE_ETH_TAP_SOCKET` or pass `--tap-socket` to select another running bridge.
-With `tap-tribe` configured as `192.168.76.1/24`, the guest is configured
+With `tap-mikos` configured as `192.168.76.1/24`, the guest is configured
 automatically; it can be pinged from the host:
 
 ```sh
@@ -115,7 +121,7 @@ automatically; it can be pinged from the host:
 ifconfig eth0 192.168.76.2 netmask 255.255.255.0 up
 
 # Host shell
-ping -I tap-tribe -c 4 192.168.76.2
+ping -I tap-mikos -c 4 192.168.76.2
 ```
 
 The root-dependent end-to-end regression uses an already running TAP bridge
@@ -148,7 +154,7 @@ cd /bin
 `execve` can load any executable static RV32 ELF in the image whose segments
 fit the flat user address range; it is not special-cased to stress-ng.
 
-With the existing `tap-tribe` bridge, `make tribe-interactive-tcp-test` starts
+With the existing `tap-mikos` bridge, `make tribe-interactive-tcp-test` starts
 BusyBox `nc -l` in this profile and transfers a marker from the host through a
 real TCP handshake and accepted stream. This validates the passive socket
 slice; it does not imply that Dropbear's fork/pipe/PTY process model is ready.
@@ -244,7 +250,7 @@ handshakes that never established instead of passing them to Dropbear.
 To focus on reconnects, run two authenticated command sessions with:
 
 ```sh
-TRIBE_ETH_TAP_SOCKET=/tmp/tribe-ethgig.sock \
+TRIBE_ETH_TAP_SOCKET=/tmp/mikos-tap.sock \
   tests/tribe/run_interactive_ssh.sh --multicore --reconnect
 ```
 
@@ -301,7 +307,7 @@ flush or gate the client behind a short ping.
 Sessions are serialized by the flat address-space scheduler. Exit the current
 dbclient and allow its session child to close and be reaped before starting
 another; the listener is then restored and accepts the next connection. If no
-accept marker exists, `ip neigh show to 192.168.76.2 dev tap-tribe` must show
+accept marker exists, `ip neigh show to 192.168.76.2 dev tap-mikos` must show
 the fixed MAC with state `PERMANENT`.
 
 The host TAP may emit traffic according to wall time while only a few guest
@@ -310,7 +316,7 @@ bridge and native Tribe adapter reject other EtherTypes before their bounded
 queues. Both queues preserve TCP payload/SYN/FIN/RST and ARP ahead of
 recoverable pure ACKs, retain packets on Unix-datagram backpressure, and clear
 queued traffic when a new simulator sends HELLO. The default bridge also
-disables IPv6 on `tap-tribe`; externally managed bridges do not get modified.
+disables IPv6 on `tap-mikos`; externally managed bridges do not get modified.
 
 The normal BusyBox/rootfs and `tribe_interactive.sh` builds produce this host
 client and a converted Dropbear-format copy of the test identity automatically.
@@ -347,3 +353,9 @@ support remain enabled because entering user mode and servicing BusyBox
 `ecall` instructions require them. The cpphdl checkout must include trap
 redirection with the MMU disabled. The minimal single-core Tribe CSR model also excludes PMP, so that test emits
 `MIKOS:PMP_UNAVAILABLE`; the normal MikOS/QEMU build still programs PMP.
+# Shared TAP
+
+Interactive sessions now default to the universal `tap-mikos` bridge at
+`/tmp/mikos-tap.sock`. See [shared TAP setup](../network/TAP.md) for setup,
+checks, and reusing an existing bridge with `MIKOS_TAP`/`MIKOS_TAP_SOCKET`.
+Legacy `TRIBE_*` overrides still work. Use one simulator at a time per bridge.

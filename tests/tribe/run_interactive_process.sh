@@ -3,7 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 multicore=()
-tap_socket="${TRIBE_ETH_TAP_SOCKET:-/tmp/tribe-ethgig.sock}"
+tap_socket="${TRIBE_ETH_TAP_SOCKET:-${MIKOS_TAP_SOCKET:-/tmp/mikos-tap.sock}}"
 wall_timeout="${TRIBE_INTERACTIVE_PROCESS_TIMEOUT:-7200}"
 nested_only="${TRIBE_INTERACTIVE_PROCESS_NESTED_ONLY:-0}"
 

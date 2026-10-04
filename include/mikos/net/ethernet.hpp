@@ -89,8 +89,8 @@ static_assert(sizeof(IcmpEchoHeader) == 8);
 }
 
 [[nodiscard]] constexpr u32 make_arp_reply(u8* bytes, u32 size,
-                                            MacAddress local_mac,
-                                            Ipv4Address local_ip) {
+                                            const MacAddress& local_mac,
+                                            const Ipv4Address& local_ip) {
   if (size < sizeof(ArpIpv4)) {
     return 0;
   }
@@ -122,8 +122,8 @@ static_assert(sizeof(IcmpEchoHeader) == 8);
 }
 
 [[nodiscard]] constexpr u32 make_icmp_echo_reply(u8* bytes, u32 size,
-                                                  MacAddress local_mac,
-                                                  Ipv4Address local_ip) {
+                                                  const MacAddress& local_mac,
+                                                  const Ipv4Address& local_ip) {
   constexpr u32 headers_size = sizeof(EthernetHeader) + sizeof(Ipv4Header) +
                                sizeof(IcmpEchoHeader);
   if (size < headers_size) {

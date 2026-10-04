@@ -163,3 +163,5 @@ Protocol references: [TCP](https://www.rfc-editor.org/rfc/rfc9293.html),
 [congestion control](https://www.rfc-editor.org/rfc/rfc5681.html).
 The 120-second user/handshake/close deadlines and bounded capacities are local
 resource policies. Optional extensions are deliberately not advertised.
+
+For shared Tribe/Extreme/Rocket TAP setup and preflight checks, see [TAP.md](TAP.md).

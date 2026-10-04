@@ -53,6 +53,10 @@ trap_entry:
 
   mv a0, sp
   call trap_handler
+#ifdef MIKOS_ROCKET
+  /* exec and signal trampolines can have written instruction memory. */
+  fence.i
+#endif
 
   lw t0, 128(sp)
   csrw mepc, t0

@@ -7,10 +7,18 @@
 
 namespace mikos {
 
+#ifdef MIKOS_EXTREME_USERSPACE
+inline constexpr u32 ram_begin = 0;
+inline constexpr u32 user_begin = 0;
+inline constexpr u32 user_end = EC_BUS_BYTES * EC_BANK_WORDS * EC_BANKS;
+extern u32 user_stack_top;
+extern u32 user_heap_end;
+#else
 inline constexpr u32 ram_begin = 0x80000000;
 inline constexpr u32 user_begin = 0x81000000;
 inline constexpr u32 user_end = 0x82000000;
 inline constexpr u32 user_stack_top = 0x81fff000;
+#endif
 inline constexpr UserRange user_memory{user_begin, user_end};
 
 struct Process {

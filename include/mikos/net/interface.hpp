@@ -60,9 +60,17 @@ static_assert(sizeof(Ifconf32) == 8);
 
 struct InterfaceState {
   MacAddress mac{{0, 0, 0, 0, 0, 0}};
+#if defined(MIKOS_EXTREME) || defined(MIKOS_TRIBE) || defined(MIKOS_ROCKET)
+  Ipv4Address address{{192, 168, 76, 2}};
+#else
   Ipv4Address address{{10, 0, 2, 15}};
+#endif
   Ipv4Address netmask{{255, 255, 255, 0}};
+#if defined(MIKOS_EXTREME) || defined(MIKOS_TRIBE) || defined(MIKOS_ROCKET)
+  Ipv4Address broadcast{{192, 168, 76, 255}};
+#else
   Ipv4Address broadcast{{10, 0, 2, 255}};
+#endif
   u16 flags{static_cast<u16>(interface_up | interface_broadcast |
                              interface_running | interface_multicast)};
 };

@@ -6,7 +6,7 @@
 extern "C" void* memcpy(void*, const void*, mikos::usize);
 extern "C" void* memset(void*, int, mikos::usize);
 extern "C" void trap_entry();
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
 extern "C" unsigned char __embedded_busybox_begin[];
 extern "C" unsigned char __embedded_busybox_end[];
 extern "C" unsigned char __embedded_dropbear_begin[];
@@ -23,7 +23,7 @@ inline constexpr u32 plic_s_enable = 0x82012080;
 inline constexpr u32 plic_m_enable = 0x0c002000;
 inline constexpr u32 plic_s_enable = 0x0c002080;
 #endif
-#ifndef MIKOS_TRIBE
+#if !defined(MIKOS_TRIBE) && !defined(MIKOS_ROCKET)
 inline constexpr u32 sifive_test = 0x00100000;
 #endif
 
@@ -208,7 +208,7 @@ template <typename Reader>
                          writable_only, 0);
 }
 
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
 [[nodiscard]] bool load_preloaded_image(const drivers::fs::root::Node& file,
                                         Image& image, usize begin,
                                         usize end) {
@@ -261,7 +261,7 @@ void copy_path(char* output, const char* input) {
     write_text("\n");
   }
   if (!node ||
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
       (preloaded_busybox ? !load_preloaded_busybox((*node), image)
                          : !load_image((*node), image, writable_only))) {
 #else
@@ -412,7 +412,7 @@ bool replace_with_executable(TrapFrame& frame, const char* path,
   const bool busybox = busybox_node &&
                        busybox_node->inode == node->inode;
   Image image{};
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
   const auto dropbear_node =
       drivers::fs::root::lookup("/usr/sbin/dropbear");
   const bool dropbear = dropbear_node &&
@@ -465,7 +465,7 @@ void restore_busybox_image() {
 bool restore_executable_image(const char* path) {
   const auto node = drivers::fs::root::lookup(path);
   Image image{};
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
   const auto dropbear_node =
       drivers::fs::root::lookup("/usr/sbin/dropbear");
   if (node && dropbear_node && node->inode == dropbear_node->inode) {
@@ -490,7 +490,7 @@ void start_stress_ng(TrapFrame& frame) {
 }
 
 void uart_put(char value) {
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
   // The interactive UART is attached directly to a host terminal. A line feed
   // alone preserves the cursor column there, so implement the advertised
   // ONLCR behavior and start each new line at column zero.
@@ -527,7 +527,10 @@ void write_u32(u32 value) {
 
 [[noreturn]] void shutdown(u32 code) {
   process.exit_code = code;
-#ifndef MIKOS_TRIBE
+#ifdef MIKOS_ROCKET
+  extern void rocket_shutdown(u32);
+  rocket_shutdown(code);
+#elif !defined(MIKOS_TRIBE)
   *reinterpret_cast<volatile u32*>(sifive_test) =
       code == 0 ? 0x5555 : ((code << 16) | 0x3333);
 #endif
@@ -564,7 +567,7 @@ extern "C" void kernel_main() {
   }
   write_text("MIKOS:FLAT_DEVICE_IRQ_OFF\n");
   const bool network_ready = network::initialize();
-#ifndef MIKOS_TRIBE_INTERACTIVE
+#ifndef MIKOS_INTERACTIVE
   if (network_ready) {
     static_cast<void>(network::boot_probe());
   }
@@ -580,7 +583,11 @@ extern "C" void kernel_main() {
     static_cast<void>(
         network::interface_ioctl(network::siocsifnetmask, request));
   }
+#ifdef MIKOS_ROCKET
+  write_text("MIKOS:ROCKET_INTERACTIVE\n");
+#else
   write_text("MIKOS:TRIBE_INTERACTIVE\n");
+#endif
 #endif
   if (!drivers::fs::root::initialize()) {
     write_text("MIKOS:EXT4_ROOT_FAIL\n");
@@ -589,7 +596,7 @@ extern "C" void kernel_main() {
   write_text("MIKOS:EXT4_ROOT_OK\n");
   const auto image = required_image(
       "/bin/busybox", false,
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
       true
 #else
       false
@@ -605,7 +612,8 @@ extern "C" void kernel_main() {
   process.session = 1;
   copy_path(process.current_directory, "/");
   copy_path(process.executable_path, "/bin/busybox");
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
+  // The PID 1 login shell sources /etc/profile to start Dropbear at boot.
   constexpr const char* arguments[] = {
       "busybox", "sh", "-il", "+m"};
 #else
@@ -635,7 +643,7 @@ extern "C" void kernel_main() {
   // Minimal Tribe excludes the optional PMP CSR range.
   write_text("MIKOS:PMP_UNAVAILABLE\n");
   write_text("MIKOS:TRIBE_POLLING\n");
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
   arch::start_scheduler_timer();
   write_text("MIKOS:NETWORK_TIMER_ON\n");
 #endif
@@ -646,18 +654,24 @@ extern "C" void kernel_main() {
     shutdown(4);
   }
   write_text("MIKOS:PMP_ON\n");
+#ifdef MIKOS_INTERACTIVE
+  arch::start_scheduler_timer();
+  write_text("MIKOS:NETWORK_TIMER_ON\n");
+  enter_user(image.entry, stack);
+#else
   scheduler.start_next_on_timer(image.entry, stack);
   arch::start_scheduler_timer();
   write_text("MIKOS:SCHED_TIMER_ON\n");
   write_text("MIKOS:UNCOOPERATIVE_ENTRY\n");
   enter_user(probe, stack - 4096);
 #endif
+#endif
 }
 
 extern "C" void trap_handler(mikos::TrapFrame* frame) {
   using namespace mikos;
   constexpr u32 user_ecall = 8;
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
   network::poll();
 #endif
 #ifdef MIKOS_TRIBE
@@ -749,12 +763,12 @@ extern "C" void trap_handler(mikos::TrapFrame* frame) {
   }
 #endif
   if (frame->mcause == arch::scheduler_timer_cause
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
       || frame->mcause == arch::tribe_user_timer_cause
 #endif
   ) {
     arch::rearm_scheduler_timer();
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef MIKOS_INTERACTIVE
     static bool reported_network_timer_tick = false;
     if (!reported_network_timer_tick) {
       reported_network_timer_tick = true;

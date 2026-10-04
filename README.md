@@ -18,6 +18,8 @@ Start with:
 - [Polling network proof of concept](doc/network-poc.md)
 - [TCP acceptance criteria and deterministic tests](tests/network/README.md)
 - [Regression and acceptance tests](tests/README.md)
+- [Native Extreme CPU, BusyBox and Dropbear port](tests/extreme/README.md)
+- [RV32 Rocket RTL, interactive BusyBox and Ethernet tests](tests/rocket/README.md)
 
 The current proof of concept boots on the supplied RV32 QEMU, enters a
 PMP-protected flat U-mode region, mounts an ext4 root image, and loads static

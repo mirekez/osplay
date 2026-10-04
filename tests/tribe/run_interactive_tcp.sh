@@ -3,8 +3,8 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 multicore=()
-tap="${TRIBE_INTERACTIVE_TAP:-tap-tribe}"
-tap_socket="${TRIBE_ETH_TAP_SOCKET:-/tmp/tribe-ethgig.sock}"
+tap="${TRIBE_INTERACTIVE_TAP:-${MIKOS_TAP:-$(python3 "$root/tests/network/tap.py" --select-tap)}}"
+tap_socket="${TRIBE_ETH_TAP_SOCKET:-${MIKOS_TAP_SOCKET:-/tmp/mikos-tap.sock}}"
 guest_address="${TRIBE_INTERACTIVE_GUEST_ADDRESS:-192.168.76.2}"
 guest_port="${TRIBE_INTERACTIVE_TCP_PORT:-2222}"
 wall_timeout="${TRIBE_INTERACTIVE_TCP_TIMEOUT:-1800}"

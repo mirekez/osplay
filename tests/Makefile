@@ -98,7 +98,7 @@ $(BUILD)/drivers/root_device_poll_test: drivers/root_device_poll_test.cpp \
     $(ROOT)/drivers/storage/root_device.cpp support/test.hpp
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DMIKOS_TRIBE \
-		-DMIKOS_TRIBE_INTERACTIVE -DMIKOS_TRIBE_MULTICORE \
+		-DMIKOS_TRIBE_INTERACTIVE -DMIKOS_INTERACTIVE -DMIKOS_TRIBE_MULTICORE \
 		-MMD -MP -MF $@.d drivers/root_device_poll_test.cpp \
 		$(ROOT)/drivers/storage/root_device.cpp $(LDFLAGS) -o $@
 

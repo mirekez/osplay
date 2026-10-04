@@ -54,11 +54,16 @@ Dropbear on port 22 with persistent on-demand host-key generation. The image's
 test-only authorized key can be replaced at
 `rootfs/root/.ssh/authorized_keys` before rebuilding.
 
-The build also generates a local test client identity at `build/mikos_ssh_key`
-when absent and adds its public key to the staged image's `authorized_keys`.
-An existing private key is preserved. `make dropbear-client` converts that
-identity to the Dropbear format used by the interactive launcher; private keys
-stay in the ignored build directory.
+The build installs the versioned regression identity from `keys/mikos_ssh_key`
+at `build/mikos_ssh_key` when absent and adds its public key to the staged image's
+`authorized_keys`. This is a deliberately public test identity, suitable only for
+isolated regression guests. Existing local identities are preserved.
+`make dropbear-client` converts the identity to
+`build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear`, with mode 0600.
+The rootfs target also prepares that converted key. If the client reports
+`Failed loading keyfile`, run `make dropbear-client` from the repository root.
+Generated copies stay in the ignored build directory; the OpenSSH fixture and
+matching public key are tracked in Git.
 
 An existing Dropbear source tree or release archive can be used without a
 download:

@@ -1,0 +1,4 @@
+#!/bin/sh
+echo MIKOS_EXTREME_INTERACTIVE
+echo 'MIKOS:INIT starting interactive BusyBox shell'
+exec /bin/sh -i
