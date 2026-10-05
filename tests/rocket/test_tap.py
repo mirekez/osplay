@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+import shlex
 import socket
 import subprocess
 import threading
@@ -44,9 +45,9 @@ def main():
                         print(f"[{time.monotonic() - started:.1f}s] {marker}", flush=True)
         reader = threading.Thread(target=read, daemon=True)
         reader.start()
-        def wait(marker):
+        def wait(marker, start=0):
             deadline = time.monotonic() + timeout
-            while marker not in "".join(text):
+            while marker not in "".join(text)[start:]:
                 if proc.poll() is not None or time.monotonic() > deadline:
                     raise RuntimeError(f"waiting for {marker}; see {log_path}")
                 time.sleep(0.1)
@@ -74,13 +75,37 @@ def main():
             else:
                 wait("MIKOS:TCP_LISTEN 22")
                 dropbear = ROOT / "build/tests/busybox/dropbear-host"
-                result = subprocess.run([str(dropbear / "dbclient"), "-i",
+                client_command = [str(dropbear / "dbclient"), "-i",
                     str(dropbear / "mikos_ssh_key.dropbear"), "-c", "none", "-y", "-y",
-                    "root@192.168.76.2", "echo ROCKET_SSH_OK"],
+                    "root@192.168.76.2"]
+                # Give dbclient a local PTY, then type exit only after the
+                # remote interactive shell has actually parked at its prompt.
+                start = len("".join(text))
+                interactive = client_command[:-1] + ["-t", client_command[-1]]
+                with (log_path.parent / "ssh-logout.log").open("wb") as client_log:
+                    client = subprocess.Popen(
+                        ["script", "-qefc", shlex.join(interactive), "/dev/null"],
+                        stdin=subprocess.PIPE, stdout=client_log,
+                        stderr=subprocess.STDOUT, start_new_session=True)
+                    try:
+                        wait("MIKOS:PTY_CHILD_PARK child=", start)
+                        client.communicate(b"exit\n", timeout=timeout)
+                        if client.returncode:
+                            raise RuntimeError("SSH logout failed; see ssh-logout.log")
+                    finally:
+                        if client.poll() is None:
+                            os.killpg(client.pid, 9)
+                            client.wait()
+                if proc.poll() is not None:
+                    raise RuntimeError("SSH logout stopped the simulator")
+                # A new connection proves the listener survived the logout.
+                result = subprocess.run(client_command + ["echo ROCKET_SSH_OK"],
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
                 (log_path.parent / "ssh-client.log").write_bytes(result.stdout)
                 if result.returncode or b"ROCKET_SSH_OK" not in result.stdout:
                     raise RuntimeError("SSH command failed; see ssh-client.log")
+                uart("echo ROCKET_UART_AFTER_SSH")
+                wait("\nROCKET_UART_AFTER_SSH\r\n")
             uart("exit")
             if proc.wait(timeout=timeout) != 0:
                 raise RuntimeError("simulator failed")

@@ -406,7 +406,11 @@ void resume_parent(TrapFrame& frame, u32 status, bool child_completed,
 }
 
 void restore_parent(TrapFrame& frame, u32 status) {
-  resume_parent(frame, status, true, true);
+  // A PTY child can finish after its parent has already returned from fork.
+  // Replay that parent's blocked read/poll instead of inventing a clone return.
+  const bool return_from_clone =
+      parent.frame.x[17] == static_cast<u32>(Syscall::clone);
+  resume_parent(frame, status, true, return_from_clone);
 }
 
 [[nodiscard]] i32 clone(TrapFrame& frame, u32 flags, u32 stack,
@@ -1161,6 +1165,90 @@ void reinstate_suspended_ancestor(TrapFrame& frame) {
   write_u32(nested_ancestor_depth);
   write_text("\n");
 #endif
+}
+
+// A PTY server can exit on a disconnected peer while its shell (or a
+// foreground program and waiting shell) is parked. Those session contexts
+// cannot run without the server in this serialized adapter. Release them so
+// the listener can accept another session without retaining PTYs or snapshots.
+void discard_parked_session() {
+  if (!interactive_child.used ||
+      (interactive_child.parent_pid != process.pid &&
+       interactive_relay_service_pid != process.pid)) {
+    return;
+  }
+  const u32 child_pid = interactive_child.pid;
+  const u32 shell_pid = interactive_parent.lineage.pid;
+  for (auto& descriptor : interactive_child_descriptors) {
+    release_descriptor(descriptor);
+  }
+  for (auto& descriptor : interactive_child_standard_redirects) {
+    release_descriptor(descriptor);
+  }
+  for (auto& descriptor : interactive_parent_descriptors) {
+    release_descriptor(descriptor);
+  }
+  for (auto& descriptor : interactive_parent_standard_redirects) {
+    release_descriptor(descriptor);
+  }
+  release_snapshot(interactive_child.snapshot);
+  release_snapshot(interactive_parent.snapshot);
+  interactive_child = {};
+  interactive_parent = {};
+  interactive_relay_service_pid = 0;
+  if (background.used &&
+      (background.pid == child_pid || background.pid == shell_pid)) {
+    background = {};
+  }
+  for (auto& child : waitable_children) {
+    if (child.used && (child.parent_pid == child_pid ||
+                       child.parent_pid == shell_pid)) {
+      child = {};
+    }
+  }
+}
+
+[[nodiscard]] bool resume_after_child_exit(TrapFrame& frame, u32 status) {
+  // park_interactive_child() resumes the server and leaves its older
+  // listener/UART ancestry stacked. Restore that fork frame before deciding
+  // whether this exit belongs to the top-level workload.
+  if (!parent.active && nested_ancestor_depth != 0 &&
+      nested_ancestors[nested_ancestor_depth - 1].child_pid == process.pid) {
+    reinstate_suspended_ancestor(frame);
+  }
+  if (!parent.active) {
+    return false;
+  }
+  discard_parked_session();
+  for (auto& child : waitable_children) {
+    if (child.used && child.parent_pid == process.pid) {
+      child = {};
+    }
+  }
+#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+  write_text("MIKOS:CHILD_EXIT pid=");
+  write_u32(process.pid);
+  write_text(" status=");
+  write_u32(status);
+  write_text("\n");
+#endif
+  if (child_tid_address != 0 &&
+      user_memory.contains(child_tid_address, sizeof(u32))) {
+    *reinterpret_cast<u32*>(child_tid_address) = 0;
+  }
+  child_tid_address = 0;
+  if (background.used && process.pid == background.pid) {
+#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+    write_text("MIKOS:BACKGROUND_EXIT status=");
+    write_u32(status);
+    write_text("\n");
+#endif
+    background.used = false;
+    background.wait = BackgroundWait::none;
+  }
+  restore_parent(frame, status);
+  reinstate_suspended_ancestor(frame);
+  return true;
 }
 
 [[nodiscard]] bool park_background(TrapFrame& frame, network::SocketHandle wait_socket) {
@@ -3212,7 +3300,7 @@ void deliver_pending_signal_impl(TrapFrame& frame) {
   if (old_stack < sizeof(SignalFrame32)) {
     shutdown(128 + signal);
   }
-  const u32 address = align_down(old_stack - sizeof(SignalFrame32),
+  const u32 address = align_down(old_stack - static_cast<u32>(sizeof(SignalFrame32)),
                                  static_cast<u32>(16));
   if (!user_memory.contains(address, sizeof(SignalFrame32))) {
     shutdown(128 + signal);
@@ -4305,35 +4393,8 @@ i32 dispatch_syscall(TrapFrame& frame) {
       return static_cast<i32>(a1);
     case Syscall::exit:
     case Syscall::exit_group:
-      if (parent.active) {
-        const u32 restored_child_pid = parent.child_pid;
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-        write_text("MIKOS:CHILD_EXIT pid=");
-        write_u32(process.pid);
-        write_text(" status=");
-        write_u32(a0);
-        write_text("\n");
-#endif
-        if (child_tid_address != 0 &&
-            user_memory.contains(child_tid_address, sizeof(u32))) {
-          *reinterpret_cast<u32*>(child_tid_address) = 0;
-        }
-        child_tid_address = 0;
-        if (background.used && process.pid == background.pid) {
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-          write_text("MIKOS:BACKGROUND_EXIT status=");
-          write_u32(a0);
-          write_text("\n");
-#endif
-          background.used = false;
-          background.wait = BackgroundWait::none;
-        }
-        restore_parent(frame, a0);
-        reinstate_suspended_ancestor(frame);
-        // The trap handler stores the dispatch result in the restored a0.
-        // Returning a constant here made every fork after PID 2 appear to its
-        // parent as PID 2 even though waitid correctly reported the real PID.
-        return static_cast<i32>(restored_child_pid);
+      if (resume_after_child_exit(frame, a0)) {
+        return static_cast<i32>(frame.x[10]);
       }
       if (process.image == 0) {
         write_text("MIKOS:BUSYBOX_EXIT ");

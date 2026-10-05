@@ -87,6 +87,14 @@ $(BUILD)/kernel/pseudo_filesystem_test: kernel/pseudo_filesystem_test.cpp \
 		kernel/pseudo_filesystem_test.cpp \
 		$(ROOT)/kernel/pseudo_filesystem.cpp $(LDFLAGS) -o $@
 
+# Exercise the real flat-process adapter with mapped RV32 user memory and
+# platform I/O stubs. Discard unrelated syscall entry points at link time.
+$(BUILD)/kernel/session_exit_test: kernel/session_exit_test.cpp \
+    $(ROOT)/kernel/syscall.cpp support/test.hpp
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -ffunction-sections -fdata-sections \
+		-MMD -MP -MF $@.d $< $(LDFLAGS) -Wl,--gc-sections -o $@
+
 $(BUILD)/net/stack_test: net/stack_test.cpp $(ROOT)/network/stack.cpp \
 		$(ROOT)/include/mikos/net/socket.hpp \
 		$(ROOT)/include/mikos/net/tcp.hpp support/test.hpp

@@ -74,7 +74,9 @@ Use `--tap-socket PATH` or `ROCKET_ETH_SOCKET` to select a different bridge.
 `ROCKET_INTERACTIVE_TAP` selects a host TAP name. Only TAP provisioning needs
 network-administration privileges; the simulator runs as the normal user.
 
-Optional host TCP/SSH tests use the provisioned TAP:
+Optional host TCP/SSH tests use the provisioned TAP. The SSH test logs out of
+an interactive PTY with `exit`, reconnects to run a command, and checks that
+the UART shell still responds before explicitly stopping the guest:
 
 ```bash
 tests/rocket/run_interactive_tcp.sh
