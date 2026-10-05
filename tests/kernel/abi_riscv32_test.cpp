@@ -12,6 +12,7 @@ int main() {
 
   MIKOS_CHECK(suite, static_cast<mikos::u32>(Syscall::mkdirat) == 34);
   MIKOS_CHECK(suite, static_cast<mikos::u32>(Syscall::fchmodat) == 53);
+  MIKOS_CHECK(suite, static_cast<mikos::u32>(Syscall::fchownat) == 54);
   MIKOS_CHECK(suite, static_cast<mikos::u32>(Syscall::pipe2) == 59);
   MIKOS_CHECK(suite, static_cast<mikos::u32>(Syscall::write) == 64);
   MIKOS_CHECK(suite, static_cast<mikos::u32>(Syscall::exit_group) == 94);
@@ -45,6 +46,8 @@ int main() {
   MIKOS_CHECK(suite,
               std::string{mikos::abi::riscv32::name(0xffffffff)} ==
                   "unknown");
+
+  MIKOS_CHECK(suite, std::string{mikos::abi::riscv32::name(54)} == "fchownat");
 
   return suite.finish();
 }

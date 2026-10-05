@@ -133,7 +133,7 @@ def main():
                 shared_missing = dict(
                     os.environ, MIKOS_TAP_SOCKET=str(directory / "shared missing")
                 )
-                for profile in ("ping", "tcp", "ssh"):
+                for profile in ("ping", "tcp", "ssh", "ssh-shell"):
                     result = subprocess.run(
                         [
                             sys.executable,
@@ -179,14 +179,19 @@ def main():
                     deadline = time.monotonic() + 1800
                     while True:
                         output = log_path.read_text(errors="replace")
-                        if "/ # " in output and "MIKOS:TCP_LISTEN 2222" in output:
+                        if "/ # " in output and "MIKOS:TCP_LISTEN 22" in output:
                             break
                         if console.poll() is not None or time.monotonic() > deadline:
                             raise RuntimeError(
                                 f"interactive boot failed; see {log_path}"
                             )
                         time.sleep(0.2)
-                    assert "-p 2222 root@192.168.76.2" in output
+                    assert "-p 22 root@192.168.76.2" in output
+                    assert (
+                        "build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear"
+                        in output
+                    )
+                    assert "test_key.dropbear" not in output
                     assert f"MIKOS:NET_IP {GUEST}" in output
                     if not args.idle:
                         ping = next(

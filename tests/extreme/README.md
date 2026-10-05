@@ -13,6 +13,8 @@ bash tests/extreme/run_all.sh --kernel-only
 python3 tests/extreme/userspace.py --test process
 python3 tests/extreme/userspace.py --test descriptors
 python3 tests/extreme/userspace.py --test ssh --verilator
+python3 tests/extreme/userspace.py --test ssh-shell
+python3 tests/extreme/userspace.py --test ssh-shell --verilator
 python3 tests/extreme/userspace.py --test tcp --multicore
 bash tests/extreme/extreme_interactive.sh
 bash tests/extreme/run_all.sh
@@ -26,6 +28,10 @@ kernel, BusyBox and (with networking) Dropbear initialization. Expect several
 minutes before `/ # ` appears; Verilator can take longer. For visible cycle updates and to skip rebuilding, run
 `./tests/extreme/extreme_interactive.sh --no-build --progress`. Commands also run
 at simulated CPU speed. `exit 0` shuts down the guest; Ctrl-C stops the simulator.
+Interactive sessions have no automatic cycle or wall-clock limit. Set
+`EXTREME_USER_TIMEOUT` to a positive number of seconds to request a time limit;
+`0` (the default for interactive use) disables it. Automated tests retain their
+cycle and time limits.
 The UART shell has no controlling terminal, so its job-control warning is expected.
 Guest UART boot messages announce memory setup, root filesystem mounting, network
 initialization and the handoff to `/bin/sh /etc/init.d/rcS`. Each stage reports
@@ -48,9 +54,18 @@ bash tests/extreme/extreme_interactive.sh
 Without those exports, the defaults are `tap-mikos` and `/tmp/mikos-tap.sock`.
 The shared host address is `192.168.76.1/24`. The guest initializes its
 fixed `192.168.76.2/24` address and `02:00:00:00:00:02` MAC automatically; no gateway
-or guest `ifconfig` command is required. Dropbear starts on port 2222. The launcher
+or guest `ifconfig` command is required. Dropbear starts on port 22. The launcher
 prints a ping command and the complete patched-client SSH command, including the
-correct Extreme identity. Wait for `MIKOS:TCP_LISTEN 2222` before connecting.
+shared mikOS identity. Wait for `MIKOS:TCP_LISTEN 22` before connecting.
+
+Extreme, Rocket and Tribe use the same test identity: `build/mikos_ssh_key`.
+Fresh builds install the checked-in `tests/busybox/keys/mikos_ssh_key` fixture;
+existing local identities are preserved. Every guest authorizes its public key.
+The shared Dropbear-format client key is
+`build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear`. Extreme refreshes it
+and the guest's authorized keys at startup, including with `--no-build`.
+Old Extreme-specific `test_key` files are no longer used. Restart a running
+guest to pick up the shared key.
 
 Select another socket with `--tap-socket PATH` or `MIKOS_TAP_SOCKET`.
 `MIKOS_TAP` selects the host interface; printed setup commands preserve these
@@ -63,6 +78,13 @@ Keep the bridge running between CPUs, with only one active simulator at a time.
 Automated ping/TCP/SSH tests use this shared link when `MIKOS_TAP`,
 `MIKOS_TAP_SOCKET` or `--tap-socket` is supplied; otherwise they create a private
 network namespace.
+
+The shared-key regression verifies clean installation, preservation of an existing
+local key, conversion and the authorized keys in a real ext4 guest image:
+
+```sh
+python3 tests/extreme/test_ssh_keys.py
+```
 
 The link regression uses the real TAP helper in an isolated namespace:
 
@@ -100,7 +122,7 @@ issue and worker execution. Userspace processes currently run on core zero.
 
 Artifacts and logs live under `build/tests/extreme`. Each acceptance invocation
 creates a private ext4 rootfs and image, so guest writes do not affect another
-run. Override `EXTREME_BUILD_ROOT`, `EXTREME_USER_TIMEOUT` (seconds, default 7200),
+run. Override `EXTREME_BUILD_ROOT`, `EXTREME_USER_TIMEOUT` (seconds, default 7200 for tests and 0 for interactive use),
 `EXTREME_SCRATCH` (default `/dev/shm`), or `JOBS` as needed. Development runners
 can select `EXTREME_BOARD_CPP`, `EXTREME_BOARD_SV`, `EXTREME_USER_IMAGE`,
 `EXTREME_BRIDGE` and `EXTREME_SSH_CLIENT` explicitly.
@@ -111,7 +133,11 @@ can select `EXTREME_BOARD_CPP`, `EXTREME_BOARD_SV`, `EXTREME_USER_IMAGE`,
   real ARP and ICMP replies, and memory/MMIO stalls.
 * Descriptor metadata: a small native musl fixture checks regular files, pipes,
   sockets and pseudo-terminals after redirecting fd0, including legacy stat64,
-  `fstatat(AT_EMPTY_PATH)`, `ttyname()` and invalid-descriptor errors.
+  `fstatat(AT_EMPTY_PATH)`, `ttyname()` and invalid-descriptor errors. PTY
+  `fchownat` tests cover UID/GID changes, unchanged IDs, directory-relative and
+  empty paths, stat consistency, invalid arguments, and Dropbear's root-ownership
+  reset at logout (including a PTY already removed). Ownership changes are
+  currently supported for live PTYs; regular filesystem nodes return `EROFS`.
 * Process: inherited fd10, a three-stage pipe, fork/exec, parent/child environment
   isolation, exit status, nested `ls`, binary64 formatting, and signal delivery.
 * TCP: a BusyBox `nc` listener executes a shell command received over Ethernet,
@@ -173,3 +199,14 @@ Interactive sessions now default to the universal `tap-mikos` bridge at
 checks, and reusing an existing bridge with `MIKOS_TAP`/`MIKOS_TAP_SOCKET`.
 All three CPUs use host `192.168.76.1` and guest `192.168.76.2`.
 Rebuild older Extreme images by running the launcher without `--no-build`.
+
+The `ssh-shell` regression opens a login shell through a real host PTY, types
+`ls` one character at a time, verifies echo before sending Enter, repeats file
+listings, runs interactive `top -d 1`, waits for two screens without typing,
+quits with `q`, verifies the shell still runs commands, and exits the SSH
+session and guest cleanly. Extreme builds enable `FEATURE_TOP_INTERACTIVE`;
+timed PTY polls preserve their absolute deadline while Dropbear runs, so `top`
+refreshes even when no keys arrive.
+The kernel PTY line discipline supplies canonical input, CR-to-LF translation,
+echo, erase/kill and EOF handling; incomplete lines leave the shell parked while
+Dropbear forwards their echo.

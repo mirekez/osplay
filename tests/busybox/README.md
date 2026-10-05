@@ -63,7 +63,8 @@ isolated regression guests. Existing local identities are preserved.
 The rootfs target also prepares that converted key. If the client reports
 `Failed loading keyfile`, run `make dropbear-client` from the repository root.
 Generated copies stay in the ignored build directory; the OpenSSH fixture and
-matching public key are tracked in Git.
+matching public key are tracked in Git. Extreme, Rocket and Tribe share this
+identity and converted client key; Extreme no longer generates a separate key.
 
 An existing Dropbear source tree or release archive can be used without a
 download:

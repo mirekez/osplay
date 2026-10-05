@@ -23,6 +23,11 @@ int main() {
                          PtyStatus::success);
   MIKOS_CHECK(suite, ptys.mode(master.handle.slot) == 0622);
 
+  // The transport tests deliberately use noncanonical input without echo.
+  TermiosState transport = *ptys.termios(master.handle);
+  transport.local_flags = 0;
+  MIKOS_CHECK(suite, ptys.set_termios(master.handle, transport) == PtyStatus::success);
+
   const mikos::u8 input[] = {'a', 'b', 'c', 'd', 'e', 'f'};
   mikos::u8 output[8]{};
   MIKOS_CHECK(suite, ptys.write(master.handle, PtyEnd::master, input,
@@ -243,6 +248,10 @@ int main() {
                   sizeof(command));
   MIKOS_CHECK(suite, output[0] == 'e' && output[4] == '\n');
   MIKOS_CHECK(suite,
+              interactive_ptys.read(interactive_master.handle, PtyEnd::master,
+                                    output, sizeof(output)).size == 6);
+  MIKOS_CHECK(suite, output[0] == 'e' && output[4] == '\r' && output[5] == '\n');
+  MIKOS_CHECK(suite,
               interactive_ptys.release(interactive_slave.handle,
                                        PtyEnd::slave) == PtyStatus::success);
   MIKOS_CHECK(suite,
@@ -293,6 +302,7 @@ int main() {
   // generate their respective process-group signals without entering that
   // input queue.
   signal_termios.local_flags |= 0x00000080;  // NOFLSH
+  signal_termios.local_flags &= ~0x2u;  // Noncanonical signal transport
   MIKOS_CHECK(suite,
               signal_ptys.set_termios(signal_slave.handle, signal_termios) ==
                   PtyStatus::success);
@@ -373,6 +383,25 @@ int main() {
                   SignalState::bit(signal_interrupt)) ==
                   SignalStatus::success);
   MIKOS_CHECK(suite, pending_signal.has_deliverable());
+
+  // Ownership is shared by a PTY's endpoints and reset when its slot is reused.
+  PtyTable<1, 8> owned;
+  const auto first_owner = owned.open_master();
+  const auto number = first_owner.handle.slot;
+  MIKOS_CHECK(suite, owned.uid(number) == 0 && owned.gid(number) == 0);
+  MIKOS_CHECK(suite, owned.set_owner(number, 1000, 100) == PtyStatus::success);
+  MIKOS_CHECK(suite, owned.set_owner(number, ~mikos::u32{0}, 200) ==
+                         PtyStatus::success);
+  MIKOS_CHECK(suite, owned.uid(number) == 1000 && owned.gid(number) == 200);
+  MIKOS_CHECK(suite, owned.set_owner(number, 3000, ~mikos::u32{0}) ==
+                         PtyStatus::success);
+  MIKOS_CHECK(suite, owned.uid(number) == 3000 && owned.gid(number) == 200);
+  MIKOS_CHECK(suite, owned.release(first_owner.handle, PtyEnd::master) ==
+                         PtyStatus::success);
+  MIKOS_CHECK(suite, owned.set_owner(number, 0, 0) == PtyStatus::bad_handle);
+  const auto second_owner = owned.open_master();
+  MIKOS_CHECK(suite, second_owner.status == PtyStatus::success);
+  MIKOS_CHECK(suite, owned.uid(number) == 0 && owned.gid(number) == 0);
 
   return suite.finish();
 }

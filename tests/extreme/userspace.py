@@ -29,7 +29,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--test",
-        choices=("boot", "descriptors", "process", "ping", "tcp", "ssh", "interactive"),
+        choices=(
+            "boot",
+            "descriptors",
+            "process",
+            "ping",
+            "tcp",
+            "ssh",
+            "ssh-shell",
+            "interactive",
+        ),
         default="interactive",
     )
     parser.add_argument("--verilator", action="store_true")
@@ -50,7 +59,7 @@ def main():
     args = parser.parse_args()
     if args.no_network and args.test != "interactive":
         parser.error("--no-network applies only to interactive sessions")
-    network = args.test in ("ping", "tcp", "ssh")
+    network = args.test in ("ping", "tcp", "ssh", "ssh-shell")
     shared_link = args.test == "interactive" or (
         network
         and (
@@ -136,12 +145,22 @@ def main():
     )
     bridge = Path(os.environ.get("EXTREME_BRIDGE", str(BASE / "host/ethgig_tap")))
     client = Path(os.environ.get("EXTREME_SSH_CLIENT", str(BASE / "host/dbclient")))
-    timeout = int(os.environ.get("EXTREME_USER_TIMEOUT", "7200"))
+    identity = ROOT / "build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear"
+    timeout = int(
+        os.environ.get(
+            "EXTREME_USER_TIMEOUT", "0" if args.test == "interactive" else "7200"
+        )
+    )
+    if timeout < 0 or (timeout == 0 and args.test != "interactive"):
+        parser.error(
+            "EXTREME_USER_TIMEOUT must be positive (0 disables the interactive timeout)"
+        )
     results = BASE / "results" / f"userspace-{args.test}-c{cores}-{flow}"
     results.mkdir(parents=True, exist_ok=True)
     profile = (
         "ssh"
-        if args.test == "ssh" or (args.test == "interactive" and link is not None)
+        if args.test in ("ssh", "ssh-shell")
+        or (args.test == "interactive" and link is not None)
         else "process" if args.test == "process" else "interactive"
     )
     environment = dict(os.environ)
@@ -237,7 +256,13 @@ def main():
                         "extreme0",
                     ]
                 )
-            command = [str(board), "--image", str(payload), "--cycles", "2000000000"]
+            command = [
+                str(board),
+                "--image",
+                str(payload),
+                "--cycles",
+                "0" if args.test == "interactive" else "2000000000",
+            ]
             if args.test != "interactive" or args.progress:
                 command += ["--progress", "10000000"]
             if media:
@@ -246,7 +271,7 @@ def main():
                 command += ["--allow-idle-network"]
                 if link:
                     print(
-                        link.connection_hint(client, BASE / "test_key.dropbear"),
+                        link.connection_hint(client, identity),
                         file=sys.stderr,
                         flush=True,
                     )
@@ -257,7 +282,18 @@ def main():
                     file=sys.stderr,
                     flush=True,
                 )
-                run(command, timeout=timeout)
+                try:
+                    run(command, timeout=timeout or None)
+                except KeyboardInterrupt:
+                    return 130
+                except subprocess.TimeoutExpired:
+                    print(
+                        f"Interactive timeout reached after {timeout} seconds",
+                        file=sys.stderr,
+                    )
+                    return 124
+                except subprocess.CalledProcessError as error:
+                    return error.returncode
                 return
             with log_path.open("w") as log, (results / "model.log").open(
                 "w"
@@ -271,8 +307,24 @@ def main():
                     simulator.stdin.write(text.encode())
                     simulator.stdin.flush()
 
-                def ssh_command(command, log, terminal):
+                def ssh_command(command, log, terminal, shell=False):
                     master = slave = None
+                    transcript = ""
+                    step = 0
+                    checkpoint = 0
+                    interaction = [
+                        ("# ", b"l"),
+                        ("l", b"s"),
+                        ("s", b"\r"),
+                        ("# ", b"ls /; echo MIKOS_SHELL_OK_2\r"),
+                        ("\r\nMIKOS_SHELL_OK_2\r\n", b"ls /; echo MIKOS_SHELL_OK_3\r"),
+                        ("\r\nMIKOS_SHELL_OK_3\r\n", b"top -d 1\r"),
+                        ("Mem:", b""),
+                        # A second display must arrive without keyboard input.
+                        ("Mem:", b"q"),
+                        ("# ", b"pwd; echo MIKOS_TOP_EXIT_OK\r"),
+                        ("\r\nMIKOS_TOP_EXIT_OK\r\n", b"exit\r"),
+                    ]
                     try:
                         if terminal:
                             master, slave = pty.openpty()
@@ -295,6 +347,7 @@ def main():
                             slave = None
 
                         def collect():
+                            nonlocal transcript
                             if master is None:
                                 return
                             while True:
@@ -308,17 +361,44 @@ def main():
                                     raise
                                 if not data:
                                     break
-                                log.write(data.decode(errors="replace"))
+                                decoded = data.decode(errors="replace")
+                                transcript += decoded
+                                log.write(decoded)
                             log.flush()
 
                         while process.poll() is None:
                             collect()
+                            if shell and step < len(interaction):
+                                expected, typed = interaction[step]
+                                if expected in transcript[checkpoint:]:
+                                    if os.write(master, typed) != len(typed):
+                                        raise RuntimeError(
+                                            "short write to SSH client terminal"
+                                        )
+                                    checkpoint = len(transcript)
+                                    step += 1
                             if simulator.poll() is not None:
                                 raise RuntimeError("CPU stopped during the SSH session")
                             if time.monotonic() >= deadline:
-                                raise TimeoutError("SSH acceptance deadline expired")
+                                expected = (
+                                    interaction[step][0]
+                                    if shell and step < len(interaction)
+                                    else "client exit"
+                                )
+                                raise TimeoutError(
+                                    f"SSH acceptance deadline expired waiting for {expected!r}"
+                                )
                             time.sleep(0.1)
                         collect()
+                        if shell:
+                            if step != len(interaction) or "# ls\r\n" not in transcript:
+                                raise RuntimeError(
+                                    "interactive SSH echo or command checks incomplete"
+                                )
+                            if not {"bin", "dev", "etc"}.issubset(transcript.split()):
+                                raise RuntimeError(
+                                    "interactive SSH directory listing missing"
+                                )
                         if process.returncode:
                             raise RuntimeError(
                                 f"SSH client failed: {process.returncode}"
@@ -378,7 +458,7 @@ def main():
                         uart("cat /tcp-received\n")
                         wait_for("MIKOS_TCP_STREAM_OK")
                     if args.test == "ssh":
-                        wait_for("MIKOS:TCP_LISTEN 2222")
+                        wait_for("MIKOS:TCP_LISTEN 22")
                         for session in (1, 2, 3):
                             marker = f"MIKOS_SSH_AUTH_OK_{session}"
                             terminal = session == 1
@@ -392,14 +472,14 @@ def main():
                                     [
                                         client,
                                         "-i",
-                                        BASE / "test_key.dropbear",
+                                        identity,
                                         "-c",
                                         "none",
                                         "-y",
                                         "-y",
                                         "-t" if terminal else "-T",
                                         "-p",
-                                        "2222",
+                                        "22",
                                         "root@192.168.76.2",
                                         remote,
                                     ],
@@ -419,10 +499,35 @@ def main():
                                 raise RuntimeError(
                                     "SSH pseudo-terminal was not allocated"
                                 )
+                    if args.test == "ssh-shell":
+                        wait_for("MIKOS:TCP_LISTEN 22")
+                        with (results / "ssh-shell.log").open("w") as ssh_log:
+                            ssh_command(
+                                [
+                                    client,
+                                    "-i",
+                                    identity,
+                                    "-c",
+                                    "none",
+                                    "-y",
+                                    "-y",
+                                    "-t",
+                                    "-p",
+                                    "22",
+                                    "root@192.168.76.2",
+                                ],
+                                ssh_log,
+                                True,
+                                shell=True,
+                            )
                     uart("exit 0\n")
                     if simulator.wait(timeout=timeout):
                         raise RuntimeError("CPU shutdown failed")
                 wait_for("Extreme board PASS")
+                if args.test in ("ssh", "ssh-shell"):
+                    output = log_path.read_text(errors="replace")
+                    if "MIKOS:ENOSYS 54 " in output or "chown /dev/pts/" in output:
+                        raise RuntimeError("SSH PTY ownership cleanup failed")
             print(
                 f"PASS: Extreme {args.test}, {cores} core(s), {flow}; logs: {results}"
             )

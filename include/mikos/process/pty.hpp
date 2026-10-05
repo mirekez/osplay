@@ -155,6 +155,9 @@ class PtyTable {
       return PtyStatus::bad_handle;
     }
     --references;
+    if (end == PtyEnd::master && pty->masters == 0 && pty->line_size != 0) {
+      commit_line(*pty);
+    }
     if (pty->masters == 0 && pty->slaves == 0) {
       const u16 generation = pty->generation;
       *pty = {};
@@ -174,7 +177,20 @@ class PtyTable {
     }
     auto& ring = end == PtyEnd::master ? pty->slave_to_master
                                        : pty->master_to_slave;
-    if (!ring.empty()) {
+    if (end == PtyEnd::slave && canonical(*pty)) {
+      if (pty->record_count != 0) {
+        auto& remaining = pty->records[pty->record_head];
+        const u32 amount = count < remaining ? count : remaining;
+        const u32 copied = ring.read(output, amount);
+        remaining -= copied;
+        if (remaining == 0) {
+          pty->record_head = (pty->record_head + 1) % BufferCapacity;
+          --pty->record_count;
+        }
+        // An empty VEOF record returns zero once, without closing the PTY.
+        return {PtyStatus::success, copied};
+      }
+    } else if (!ring.empty()) {
       return {PtyStatus::success, ring.read(output, count)};
     }
     const bool peer_closed =
@@ -232,9 +248,9 @@ class PtyTable {
                  : PtyIoResult{PtyStatus::success, consumed};
     }
 
-    // Input written to a PTY master passes through the slave's line
-    // discipline. Honour the signal-generating characters even though the
-    // rest of MikOS's bounded line discipline is deliberately minimal.
+    // A non-editing shell relies on the terminal for echo and complete lines.
+    // Keep incomplete input out of the readable queue so the flat scheduler
+    // need not copy a shell and its parent for every individual keystroke.
     constexpr u32 isig = 0x00000001;
     constexpr u32 echo = 0x00000008;
     constexpr u32 noflsh = 0x00000080;
@@ -246,7 +262,21 @@ class PtyTable {
     u32 consumed = 0;
     u64 generated_signals = 0;
     for (; consumed < count; ++consumed) {
-      const u8 character = input[consumed];
+      u8 character = input[consumed];
+      const u32 input_flags = pty->termios.input_flags;
+      if ((input_flags & 0x20) != 0) {  // ISTRIP
+        character &= 0x7f;
+      }
+      if (character == '\r') {
+        if ((input_flags & 0x80) != 0) {  // IGNCR takes priority over ICRNL
+          continue;
+        }
+        if ((input_flags & 0x100) != 0) {
+          character = '\n';
+        }
+      } else if (character == '\n' && (input_flags & 0x40) != 0) {  // INLCR
+        character = '\r';
+      }
       u8 signal = 0;
       if ((pty->termios.local_flags & isig) != 0) {
         if (pty->termios.control[vintr] != disabled &&
@@ -261,10 +291,62 @@ class PtyTable {
         }
       }
       if (signal == 0) {
-        if (ring.full()) {
-          break;
+        if (canonical(*pty)) {
+          const auto control = [&](u32 index) {
+            return pty->termios.control[index] != disabled &&
+                   character == pty->termios.control[index];
+          };
+          if (control(2)) {  // VERASE
+            if (pty->line_size != 0) {
+              const u8 erased = pty->line[--pty->line_size];
+              if ((pty->termios.local_flags & (echo | 0x10)) == (echo | 0x10)) {
+                const u8 erase[]{'\b', ' ', '\b'};
+                static_cast<void>(pty->slave_to_master.write(erase, sizeof(erase)));
+                if ((pty->termios.local_flags & echoctl) != 0 &&
+                    (erased < 32 || erased == 127) && erased != '\t') {
+                  static_cast<void>(pty->slave_to_master.write(erase, sizeof(erase)));
+                }
+              } else {
+                echo_input(*pty, character);
+              }
+            }
+            continue;
+          }
+          if (control(3)) {  // VKILL
+            pty->line_size = 0;
+            echo_input(*pty, character);
+            if ((pty->termios.local_flags & (echo | 0x20)) == (echo | 0x20)) {
+              echo_input(*pty, '\n');
+            }
+            continue;
+          }
+          if (pty->record_count == BufferCapacity) {
+            break;
+          }
+          if (control(4)) {  // VEOF is a record boundary, never a data byte.
+            commit_line(*pty);
+            continue;
+          }
+          const bool end_line = character == '\n' || control(11) ||
+              ((pty->termios.local_flags & 0x8000) != 0 && control(16));
+          if (!end_line && pty->line_size == BufferCapacity - 1) {
+            // Reserve room for the delimiter, as on a bounded canonical TTY.
+            continue;
+          }
+          if (ring.free_space() <= pty->line_size) {
+            break;
+          }
+          pty->line[pty->line_size++] = character;
+          if (end_line) {
+            commit_line(*pty);
+          }
+        } else {
+          if (ring.full()) {
+            break;
+          }
+          static_cast<void>(ring.write(&character, 1));
         }
-        static_cast<void>(ring.write(&character, 1));
+        echo_input(*pty, character);
         continue;
       }
 
@@ -272,6 +354,7 @@ class PtyTable {
       if ((pty->termios.local_flags & noflsh) == 0) {
         pty->master_to_slave.clear();
         pty->slave_to_master.clear();
+        pty->line_size = pty->record_head = pty->record_count = 0;
       }
       if ((pty->termios.local_flags & echo) != 0) {
         if ((pty->termios.local_flags & echoctl) != 0 && character < 32) {
@@ -352,7 +435,17 @@ class PtyTable {
     if (pty == nullptr) {
       return PtyStatus::bad_handle;
     }
+    const bool was_canonical = canonical(*pty);
     pty->termios = value;
+    if (was_canonical && !canonical(*pty)) {
+      static_cast<void>(pty->master_to_slave.write(pty->line, pty->line_size));
+      pty->line_size = pty->record_head = pty->record_count = 0;
+    } else if (!was_canonical && canonical(*pty) &&
+               !pty->master_to_slave.empty()) {
+      pty->records[0] = pty->master_to_slave.size();
+      pty->record_head = 0;
+      pty->record_count = 1;
+    }
     return PtyStatus::success;
   }
 
@@ -390,7 +483,9 @@ class PtyTable {
                                              : pty->master_to_slave;
     const bool peer_closed =
         end == PtyEnd::master ? pty->slaves == 0 : pty->masters == 0;
-    return !ring.empty() || peer_closed;
+    const bool input_ready = end == PtyEnd::slave && canonical(*pty)
+                                 ? pty->record_count != 0 : !ring.empty();
+    return input_ready || peer_closed;
   }
 
   [[nodiscard]] constexpr bool writable(PtyHandle handle, PtyEnd end) const {
@@ -402,6 +497,10 @@ class PtyTable {
         end == PtyEnd::master ? pty->slaves == 0 : pty->masters == 0;
     const auto& ring = end == PtyEnd::master ? pty->master_to_slave
                                              : pty->slave_to_master;
+    if (end == PtyEnd::master && canonical(*pty)) {
+      return !peer_closed && pty->record_count < BufferCapacity &&
+             ring.free_space() > pty->line_size;
+    }
     return !peer_closed && !ring.full();
   }
 
@@ -421,6 +520,29 @@ class PtyTable {
     return active(number) ? ptys_[number].mode : 0;
   }
 
+  [[nodiscard]] constexpr u32 uid(u8 number) const {
+    return active(number) ? ptys_[number].uid : 0;
+  }
+
+  [[nodiscard]] constexpr u32 gid(u8 number) const {
+    return active(number) ? ptys_[number].gid : 0;
+  }
+
+  [[nodiscard]] constexpr PtyStatus set_owner(u8 number, u32 uid, u32 gid) {
+    if (!active(number)) {
+      return PtyStatus::bad_handle;
+    }
+    auto& pty = ptys_[number];
+    // Linux chown uses -1 to leave an individual ID unchanged.
+    if (uid != ~u32{0}) {
+      pty.uid = uid;
+    }
+    if (gid != ~u32{0}) {
+      pty.gid = gid;
+    }
+    return PtyStatus::success;
+  }
+
   [[nodiscard]] constexpr PtyStatus set_mode(u8 number, u16 mode) {
     if (!active(number)) {
       return PtyStatus::bad_handle;
@@ -433,10 +555,17 @@ class PtyTable {
   struct Pty {
     io::RingBuffer<BufferCapacity> master_to_slave{};
     io::RingBuffer<BufferCapacity> slave_to_master{};
+    u8 line[BufferCapacity]{};
+    u32 line_size{};
+    u32 records[BufferCapacity]{};
+    u32 record_head{};
+    u32 record_count{};
     TermiosState termios{};
     WindowSize window{};
     u32 session{};
     u32 foreground_group{};
+    u32 uid{};
+    u32 gid{};
     u16 generation{};
     u16 masters{};
     u16 slaves{};
@@ -444,6 +573,41 @@ class PtyTable {
     bool used{};
     bool locked{};
   };
+
+  [[nodiscard]] static constexpr bool canonical(const Pty& pty) {
+    return (pty.termios.local_flags & 0x2) != 0;  // ICANON
+  }
+
+  static constexpr void commit_line(Pty& pty) {
+    static_cast<void>(pty.master_to_slave.write(pty.line, pty.line_size));
+    pty.records[(pty.record_head + pty.record_count) % BufferCapacity] =
+        pty.line_size;
+    ++pty.record_count;
+    pty.line_size = 0;
+  }
+
+  static constexpr void echo_input(Pty& pty, u8 character) {
+    const u32 flags = pty.termios.local_flags;
+    if ((flags & 0x8) == 0 &&
+        !(canonical(pty) && character == '\n' && (flags & 0x40) != 0)) {
+      return;
+    }
+    if (character == '\n' && (pty.termios.output_flags & 0x5) == 0x5) {
+      const u8 newline[]{'\r', '\n'};
+      if (pty.slave_to_master.free_space() >= sizeof(newline)) {
+        static_cast<void>(pty.slave_to_master.write(newline, sizeof(newline)));
+      }
+    } else if ((flags & 0x200) != 0 &&
+               (character < 32 || character == 127) &&
+               character != '\n' && character != '\t') {
+      const u8 visible[]{'^', static_cast<u8>(character ^ 0x40)};
+      if (pty.slave_to_master.free_space() >= sizeof(visible)) {
+        static_cast<void>(pty.slave_to_master.write(visible, sizeof(visible)));
+      }
+    } else {
+      static_cast<void>(pty.slave_to_master.write(&character, 1));
+    }
+  }
 
   [[nodiscard]] static constexpr u16 references(const Pty& pty, PtyEnd end) {
     return end == PtyEnd::master ? pty.masters : pty.slaves;

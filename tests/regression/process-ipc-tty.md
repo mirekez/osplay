@@ -15,7 +15,19 @@ Current executable gates:
   coalescing, unblock delivery, uncatchable signals, and default actions.
 - `tests/kernel/pty_test.cpp`: PTY allocation/locking, bidirectional rings,
   termios and winsize state, atomic `OPOST | ONLCR` output conversion at ring
-  boundaries, foreground groups, hangup, and slot reuse.
+  boundaries, foreground groups, hangup, ownership changes and reset on slot reuse.
+- `tests/kernel/pty_line_test.cpp`: canonical readiness and line boundaries,
+  per-character echo, CR/LF input translation, erase/kill, EOF records, raw-mode
+  transitions, signal flushing, hangup and bounded input backpressure.
+- `python3 tests/extreme/userspace.py --test ssh-shell` (also `--verilator`):
+  real SSH login shell, separate character echo before Enter, repeated `ls`,
+  timer-driven `top` refresh, `q`, restored shell and clean session/guest shutdown.
+- `tests/kernel/session_exit_test.cpp`: real snapshot/descriptor restoration,
+  nested PTY relay, timed poll/select wakeups for both time ABIs, input/signal
+  precedence at expiration, and repeated connection cleanup.
+- `python3 tests/extreme/userspace.py --test descriptors` (also `--verilator`):
+  PTY ownership through musl chown/fchownat, stat readback, invalid paths/flags,
+  and Dropbear logout cleanup for live and already released PTYs.
 - `tests/kernel/snapshot_arena_test.cpp`: exact-sized fork-snapshot allocation,
   alignment, an allocation above the removed 512 KiB per-level limit,
   exhaustion, out-of-order release, fragmentation, two-sided coalescing,
@@ -38,5 +50,6 @@ Current executable gates:
   adapters with freestanding warnings treated as errors.
 
 Still pending target gates include general concurrent/background runnable
-ordering, blocking pipe wake/replay, and a complete canonical line discipline.
+ordering, blocking pipe wake/replay, and remaining terminal editing and flow-control
+semantics beyond the bounded canonical line discipline.
 They must not be inferred from host state-machine coverage or compile success.

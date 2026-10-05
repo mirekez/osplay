@@ -41,12 +41,13 @@ if ((!kernel_only)); then
       args=()
       [[ "$flow" == verilator ]] && args+=(--verilator)
       [[ "$cores" == multi ]] && args+=(--multicore)
-      for profile in boot descriptors process ping tcp ssh; do
+      for profile in boot descriptors process ping tcp ssh ssh-shell; do
         run_case "userspace-$profile-$cores-$flow" \
           python3 "$root/tests/extreme/userspace.py" --test "$profile" "${args[@]}"
       done
     done
   done
+  run_case shared-ssh-keys python3 "$root/tests/extreme/test_ssh_keys.py"
   run_case shared-bridge-build bash "$root/tests/network/build_tap.sh"
   run_case interactive-link unshare -Urn python3 "$root/tests/extreme/test_interactive_network.py"
 fi

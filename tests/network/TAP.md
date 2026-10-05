@@ -50,7 +50,7 @@ the socket. Platform setup scripts delegate to shared setup.
 | CPU | Host | Guest | SSH port |
 |---|---|---|---|
 | Tribe / Rocket | 192.168.76.1/24 | 192.168.76.2 | 22 |
-| Extreme | 192.168.76.1/24 | 192.168.76.2 | 2222 |
+| Extreme | 192.168.76.1/24 | 192.168.76.2 | 22 |
 
 All profiles use guest MAC `02:00:00:00:00:02` and the same /24 subnet.
 No additional subnet, alias or host route is installed for Extreme.
@@ -81,3 +81,24 @@ unshare -Urn python3 tests/network/test_tap.py
 That test uses real Linux TAP traffic and synthetic framed peers for all three
 profiles, verifies sequential peer handover, in-place repair, stale sockets and
 local-IP conflict detection. It is not an OS simulation test.
+
+## Shared SSH Identity
+
+All three guests listen on port 22 and authorize `build/mikos_ssh_key.pub`.
+Builds preserve an existing `build/mikos_ssh_key`; a clean build installs the
+versioned regression key from `tests/busybox/keys/mikos_ssh_key`. This is the
+shared test identity for the isolated simulation link.
+
+The converted client key has the same path for every CPU. After the guest
+prints `MIKOS:TCP_LISTEN 22`, connect from another terminal in `~/mikos`:
+
+```bash
+build/tests/busybox/dropbear-host/dbclient \
+  -i build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear \
+  -c none -y -y root@192.168.76.2
+```
+
+Extreme also supplies a compatible client at `build/tests/extreme/host/dbclient`
+and prints that command using the same shared identity. Restart an existing
+Extreme session to replace its old private authorized key with the shared key;
+no TAP restart is needed.

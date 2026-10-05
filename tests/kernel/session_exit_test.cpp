@@ -1,6 +1,7 @@
-#include <support/test.hpp>
 #include <sys/mman.h>
+
 #include <cstdlib>
+#include <support/test.hpp>
 
 // Test the production context switching and exit code, not a second model.
 #include <kernel/syscall.cpp>
@@ -16,10 +17,14 @@ void write_text(const char*) {}
 void write_u32(u32) {}
 [[noreturn]] void shutdown(u32) { std::abort(); }
 bool restore_executable_image(const char*) { return true; }
+namespace arch {
+u64 test_ticks{};
+u64 time_ticks() { return test_ticks; }
+}  // namespace arch
 namespace network {
 SocketResult socket_retain(SocketHandle) { return SocketResult::success; }
 SocketResult socket_close(SocketHandle) { return SocketResult::success; }
-}
+}  // namespace network
 }  // namespace mikos
 
 namespace {
@@ -35,6 +40,8 @@ struct Session {
 
   explicit Session(test::Suite& suite) {
     process = {};
+    signals = {};
+    active_signal_frame = {};
     process.pid = 1;
     process.process_group = process.session = 1;
     process.mutable_begin = user_begin;
@@ -163,6 +170,77 @@ int main() {
     MIKOS_CHECK(suite, interactive_parent.active);
     MIKOS_CHECK(suite, resume_after_child_exit(session.frame, 1));
     session.finish(suite);
+  }
+  // A timed PTY wait below ash must wake through Dropbear without input.
+  // Cover both timeout ABIs and ensure select outputs are cleared only in
+  // the restored child's memory, not the server's current address space.
+  for (const auto call : {Syscall::ppoll, Syscall::ppoll64, Syscall::pselect6,
+                          Syscall::pselect6_time64}) {
+    for (u32 wake = 0; wake < 3; ++wake) {
+      Session session{suite};
+      const u32 program = session.fork(suite);
+      session.frame.x[17] = static_cast<u32>(call);
+      session.frame.x[10] = 1;
+      const bool select = call == Syscall::pselect6 || call == Syscall::pselect6_time64;
+      auto* sets = reinterpret_cast<u32*>(user_begin);
+      if (select) {
+        for (u32 i = 0; i < 3; ++i) {
+          sets[i] = 1;
+          session.frame.x[11 + i] = user_begin + i * sizeof(u32);
+        }
+      } else {
+        auto* pollfd = reinterpret_cast<Pollfd32*>(user_begin);
+        *pollfd = {0, 1, 0};
+        session.frame.x[10] = user_begin;
+        session.frame.x[11] = 1;
+      }
+      const u32 argument = session.frame.x[10];
+      arch::test_ticks = 100;
+      MIKOS_CHECK(suite, park_interactive_child(session.frame, session.pty,
+                                                PtyEnd::slave, 200));
+      MIKOS_CHECK(suite, process.pid == session.server);
+      MIKOS_CHECK(suite, interactive_parent.active);
+      sets[0] = sets[1] = sets[2] = 0xdeadbeef;
+      arch::test_ticks = 199;
+      MIKOS_CHECK(suite, !resume_interactive_child_if_ready(session.frame));
+      if (wake == 1) {
+        const u8 input[]{'q', '\n'};
+        MIKOS_CHECK(suite, ptys.write(session.pty, PtyEnd::master, input, 2).size == 2);
+      } else if (wake == 2) {
+        MIKOS_CHECK(suite, interactive_child.signals.queue(signal_interrupt) ==
+                               SignalStatus::success);
+      }
+      arch::test_ticks = 200;
+      MIKOS_CHECK(suite, resume_interactive_child_if_ready(session.frame));
+      MIKOS_CHECK(suite, process.pid == program);
+      MIKOS_CHECK(suite, parent.lineage.pid == session.shell);
+      if (wake == 1) {
+        // Ready input takes precedence over expiration and replays the call.
+        MIKOS_CHECK(suite, session.frame.mepc == 0x81001000);
+        MIKOS_CHECK(suite, session.frame.x[10] == argument);
+      } else {
+        MIKOS_CHECK(suite, session.frame.mepc == 0x81001004);
+        MIKOS_CHECK(suite,
+                    session.frame.x[10] ==
+                        (wake == 2 ? static_cast<u32>(error(Errno::interrupted)) : 0));
+      }
+      if (select) {
+        for (u32 i = 0; i < 3; ++i) {
+          MIKOS_CHECK(suite, sets[i] == (wake == 0 ? 0u : 1u));
+        }
+      } else {
+        const auto* pollfd = reinterpret_cast<const Pollfd32*>(user_begin);
+        MIKOS_CHECK(suite, pollfd->descriptor == 0 && pollfd->events == 1 &&
+                               pollfd->returned_events == 0);
+      }
+      MIKOS_CHECK(suite, resume_after_child_exit(session.frame, 0));
+      MIKOS_CHECK(suite, process.pid == session.shell);
+      MIKOS_CHECK(suite, waitid(1, program, user_begin, 4) == 0);
+      MIKOS_CHECK(suite, resume_after_child_exit(session.frame, 0));
+      MIKOS_CHECK(suite, process.pid == session.server);
+      MIKOS_CHECK(suite, resume_after_child_exit(session.frame, 0));
+      session.finish(suite);
+    }
   }
   munmap(memory, arena_end - user_begin);
   return suite.finish();

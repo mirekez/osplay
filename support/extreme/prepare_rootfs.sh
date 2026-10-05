@@ -4,7 +4,8 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 base="${EXTREME_BUILD_ROOT:-$root/build/tests/extreme}"
 stage="${EXTREME_ROOTFS_STAGE:-$base/rootfs}"
 image="${EXTREME_ROOTFS_IMAGE:-$base/rootfs.ext4}"
-mkdir -p "$stage"/{bin,sbin,usr/bin,usr/sbin,etc/init.d,etc/dropbear,root/.ssh,tmp,dev,proc,sys}
+bash "$root/support/extreme/prepare_ssh_key.sh"
+mkdir -p "$stage"/{bin,sbin,usr/bin,usr/sbin,etc/init.d,etc/dropbear,root/.ssh,tmp,dev/pts,proc,sys}
 chmod 755 "$stage"
 chmod 700 "$stage/root" "$stage/root/.ssh"
 for app in busybox sh ash echo printf test cat ls mkdir pwd sleep true false ping ifconfig nc kill netstat top tty; do
@@ -17,7 +18,8 @@ for name in passwd group profile shells; do
   cp "$root/tests/busybox/rootfs/etc/$name" "$stage/etc/$name"
 done
 cp "$root/tests/busybox/rootfs/root/.ssh/authorized_keys" "$stage/root/.ssh/authorized_keys"
-if [[ -f "$base/test_key.pub" ]]; then printf '\n' >> "$stage/root/.ssh/authorized_keys"; cat "$base/test_key.pub" >> "$stage/root/.ssh/authorized_keys"; fi
+printf '\n' >> "$stage/root/.ssh/authorized_keys"
+cat "$root/build/mikos_ssh_key.pub" >> "$stage/root/.ssh/authorized_keys"
 chmod 600 "$stage/root/.ssh/authorized_keys"
 base64 -d "$root/tests/busybox/rootfs/etc/dropbear/dropbear_ed25519_host_key.b64" > "$stage/etc/dropbear/dropbear_ed25519_host_key"
 chmod 600 "$stage/etc/dropbear/dropbear_ed25519_host_key"

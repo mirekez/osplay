@@ -71,7 +71,7 @@ class InteractiveLink:
                 "-y",
                 "-y",
                 "-p",
-                "2222",
+                "22",
                 f"root@{GUEST}",
             ]
         )
@@ -80,7 +80,7 @@ class InteractiveLink:
             "Use one simulator at a time on the shared bridge.\n"
             "The guest IP is configured at boot; no ifconfig command or gateway is needed.\n"
             f"From another host terminal, check the link:\n  {ping}\n"
-            "SSH after MIKOS:TCP_LISTEN 2222 appears:\n"
+            "SSH after MIKOS:TCP_LISTEN 22 appears:\n"
             f"  {ssh}\n"
             "Use this Dropbear client and identity for the mikOS SSH test profile.\n"
             "Authentication can take several minutes. Reconnect after the previous client exits."

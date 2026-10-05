@@ -186,6 +186,7 @@ struct ParkedInteractiveChild {
   u32 file_creation_mask{};
   char current_directory[256]{};
   char executable_path[256]{};
+  u64 wait_deadline{~u64{0}};
   process_model::PtyHandle wait_pty{};
   process_model::PtyEnd wait_end{process_model::PtyEnd::slave};
   process_model::SnapshotAllocation snapshot{};
@@ -209,7 +210,7 @@ void discard_parent_descriptors();
 [[nodiscard]] bool resume_background_if_ready(TrapFrame& frame);
 [[nodiscard]] bool park_interactive_child(
     TrapFrame& frame, process_model::PtyHandle wait_pty,
-    process_model::PtyEnd wait_end);
+    process_model::PtyEnd wait_end, u64 deadline = ~u64{0});
 [[nodiscard]] bool resume_interactive_child_if_ready(TrapFrame& frame);
 [[nodiscard]] bool stack_suspended_ancestor();
 void reinstate_suspended_ancestor(TrapFrame& frame);
@@ -841,7 +842,7 @@ void capture_interactive_child(TrapFrame& frame,
 
 [[nodiscard]] bool park_interactive_child(
     TrapFrame& frame, process_model::PtyHandle wait_pty,
-    process_model::PtyEnd wait_end) {
+    process_model::PtyEnd wait_end, u64 deadline) {
   if (!process_model::pty_child_can_park(
           interactive_child.used, parent.active,
           wait_end == process_model::PtyEnd::slave)) {
@@ -855,6 +856,7 @@ void capture_interactive_child(TrapFrame& frame,
     return false;
   }
   capture_interactive_child(frame, wait_pty, wait_end);
+  interactive_child.wait_deadline = deadline;
   if (!save_interactive_child_memory()) {
 #if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
     write_text("MIKOS:PTY_CHILD_PARK_ENOMEM mutable=");
@@ -934,10 +936,13 @@ void capture_interactive_child(TrapFrame& frame,
   const bool wait_interrupted =
       interactive_child.used &&
       interactive_child.signals.has_deliverable();
+  const bool wait_expired =
+      interactive_child.used && interactive_child.wait_deadline != ~u64{0} &&
+      arch::time_ticks() >= interactive_child.wait_deadline;
   const bool relayed = interactive_parent.active;
   if (!process_model::pty_child_can_resume(
           interactive_child.used, process.pid, interactive_child.parent_pid,
-          parent.active, slave_readable, wait_interrupted,
+          parent.active, slave_readable || wait_expired, wait_interrupted,
           relayed ? interactive_relay_service_pid
                   : process_model::invalid_pid) ||
       (relayed && nested_ancestor_depth == nested_ancestor_capacity) ||
@@ -1018,11 +1023,24 @@ void capture_interactive_child(TrapFrame& frame,
   move_saved_descriptors(interactive_child_descriptors,
                          interactive_child_standard_redirects);
   frame = interactive_child.frame;
-  if (wait_interrupted) {
+  if (wait_interrupted || (wait_expired && !slave_readable)) {
+    // Complete an expired poll instead of replaying its relative timeout.
+    // ppoll revents were cleared before parking; select sets still contain
+    // the request and must be cleared in the restored child address space.
+    if (!wait_interrupted &&
+        (frame.x[17] == static_cast<u32>(Syscall::pselect6) ||
+         frame.x[17] == static_cast<u32>(Syscall::pselect6_time64))) {
+      for (u32 argument = 11; argument <= 13; ++argument) {
+        if (frame.x[argument] != 0) {
+          *reinterpret_cast<u32*>(frame.x[argument]) = 0;
+        }
+      }
+    }
 #ifdef MIKOS_EXTREME_USERSPACE
     frame.extreme_retry = false;
 #endif
-    frame.x[10] = static_cast<u32>(error(Errno::interrupted));
+    frame.x[10] = wait_interrupted
+                      ? static_cast<u32>(error(Errno::interrupted)) : 0;
     frame.mepc += 4;
   }
   process.brk = interactive_child.brk;
@@ -1716,6 +1734,56 @@ void discard_parked_session() {
     return descriptor == 0 ? Node::standard_input : Node::standard_output;
   }
   return {};
+}
+
+// Ownership metadata is supported for live devpts nodes. The root filesystem
+// currently has no ownership mutation API, just as with fchmodat above.
+[[nodiscard]] i32 fchownat(u32 directory_descriptor, u32 address,
+                           u32 uid, u32 gid, u32 flags) {
+  constexpr u32 at_symlink_nofollow = 0x100;
+  constexpr u32 at_empty_path = 0x1000;
+  constexpr u32 at_current_working_directory = static_cast<u32>(-100);
+  if ((flags & ~(at_symlink_nofollow | at_empty_path)) != 0) {
+    return error(Errno::invalid_argument);
+  }
+  char raw[path::capacity]{};
+  if (!copy_user_string(address, raw, sizeof(raw))) {
+    return error(Errno::bad_address);
+  }
+  Node node{};
+  if (raw[0] == '\0') {
+    if ((flags & at_empty_path) == 0) {
+      return error(Errno::no_entry);
+    }
+    if (directory_descriptor == at_current_working_directory) {
+      return error(Errno::read_only_filesystem);
+    }
+    node = descriptor_node(directory_descriptor);
+    if (node == Node::none) {
+      return error(Errno::bad_file_descriptor);
+    }
+  } else {
+    if (raw[0] != '/' && directory_descriptor != at_current_working_directory) {
+      const Node base = descriptor_node(directory_descriptor);
+      if (base == Node::none) {
+        return error(Errno::bad_file_descriptor);
+      }
+      if (!directory(base)) {
+        return error(Errno::not_directory);
+      }
+    }
+    node = path_node_at(directory_descriptor, address);
+    if (node == Node::none) {
+      return error(Errno::no_entry);
+    }
+  }
+  if (node != Node::pty || node.pty_number == 0xff) {
+    return error(Errno::read_only_filesystem);
+  }
+  return ptys.set_owner(node.pty_number, uid, gid) ==
+                 process_model::PtyStatus::success
+             ? 0
+             : error(Errno::no_entry);
 }
 
 [[nodiscard]] bool descriptor_open(u32 descriptor) {
@@ -2673,6 +2741,10 @@ static_assert(sizeof(Stat64) == 128);
                  ? PseudoFilesystem::inode(node.pseudo_node)
                  : static_cast<u32>(node.kind));
   value.mode = node_mode(node);
+  if (node == Node::pty) {
+    value.uid = ptys.uid(node.pty_number);
+    value.gid = ptys.gid(node.pty_number);
+  }
   value.links = directory(node) ? 2 : 1;
   value.size = node_size(node);
   value.block_size = 4096;
@@ -2720,6 +2792,10 @@ static_assert(sizeof(Statx) == 256);
   // fstat64() on the open slave and statx() for the /dev/pts/N pathname, then
   // rejects the name unless both describe the same character device.
   value.mode = static_cast<u16>(node_mode(node));
+  if (node == Node::pty) {
+    value.uid = ptys.uid(node.pty_number);
+    value.gid = ptys.gid(node.pty_number);
+  }
   value.inode =
       node == Node::filesystem
           ? node.file.inode
@@ -2865,7 +2941,7 @@ static_assert(sizeof(Statx) == 256);
       if (slot != nullptr && slot->node == Node::pty) {
         const auto wait_pty = slot->pty;
         const auto wait_end = slot->pty_end;
-        if (park_interactive_child(frame, wait_pty, wait_end)) {
+        if (park_interactive_child(frame, wait_pty, wait_end, deadline)) {
           return static_cast<i32>(frame.x[10]);
         }
       }
@@ -2991,7 +3067,7 @@ static_assert(sizeof(Statx) == 256);
       if (slot != nullptr && slot->node == Node::pty) {
         const auto wait_pty = slot->pty;
         const auto wait_end = slot->pty_end;
-        if (park_interactive_child(frame, wait_pty, wait_end)) {
+        if (park_interactive_child(frame, wait_pty, wait_end, deadline)) {
           return static_cast<i32>(frame.x[10]);
         }
       }
@@ -4376,6 +4452,8 @@ i32 dispatch_syscall(TrapFrame& frame) {
       return path_node_at(a0, a1) == Node::none ? error(Errno::no_entry) : 0;
     case Syscall::fchmodat:
       return fchmodat(a0, a1, a2);
+    case Syscall::fchownat:
+      return fchownat(a0, a1, a2, a3, a4);
     case Syscall::openat:
       return openat(a0, a1, a2);
     case Syscall::close:

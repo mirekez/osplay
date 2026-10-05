@@ -1,4 +1,4 @@
 #!/bin/sh
-/usr/sbin/dropbear -F -p 2222 -P /tmp/dropbear.pid &
+/usr/sbin/dropbear -F -p 22 -P /tmp/dropbear.pid &
 echo MIKOS_EXTREME_SSH_STARTED
 exec /bin/sh -i
