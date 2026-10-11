@@ -3,7 +3,7 @@
 #include <drivers/fs/filesystem.hpp>
 #include <array>
 
-namespace mikos::drivers::fs::ext4 {
+namespace osplay::drivers::fs::ext4 {
 
 enum class Type : u8 {
   regular,
@@ -1767,4 +1767,4 @@ class Volume {
   std::array<u8, 4096> directory_block_{};
 };
 
-}  // namespace mikos::drivers::fs::ext4
+}  // namespace osplay::drivers::fs::ext4

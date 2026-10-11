@@ -4,8 +4,8 @@
 
 namespace {
 
-using namespace mikos;
-using mikos::drivers::storage::SectorReader;
+using namespace osplay;
+using osplay::drivers::storage::SectorReader;
 
 class Device {
  public:
@@ -74,39 +74,39 @@ class Device {
 }  // namespace
 
 int main() {
-  mikos::test::Suite suite{"drivers/sector_reader"};
+  osplay::test::Suite suite{"drivers/sector_reader"};
   Device device;
   SectorReader reader{device};
   u8 output[24]{};
-  MIKOS_CHECK(suite, reader.size() == 64);
-  MIKOS_CHECK(suite, reader.read(7, output, sizeof(output)));
+  OSPLAY_CHECK(suite, reader.size() == 64);
+  OSPLAY_CHECK(suite, reader.read(7, output, sizeof(output)));
   for (u32 index = 0; index < sizeof(output); ++index) {
-    MIKOS_CHECK(suite, output[index] == index + 7);
+    OSPLAY_CHECK(suite, output[index] == index + 7);
   }
-  MIKOS_CHECK(suite, device.reads() == 2);
+  OSPLAY_CHECK(suite, device.reads() == 2);
 
   u8 cached[3]{};
-  MIKOS_CHECK(suite, reader.read(17, cached, sizeof(cached)));
-  MIKOS_CHECK(suite, device.reads() == 2);
-  MIKOS_CHECK(suite, !reader.read(63, output, 2));
-  MIKOS_CHECK(suite, !reader.read(0, nullptr, 1));
+  OSPLAY_CHECK(suite, reader.read(17, cached, sizeof(cached)));
+  OSPLAY_CHECK(suite, device.reads() == 2);
+  OSPLAY_CHECK(suite, !reader.read(63, output, 2));
+  OSPLAY_CHECK(suite, !reader.read(0, nullptr, 1));
   const u8 replacement[] = {0xa1, 0xb2, 0xc3, 0xd4, 0xe5};
-  MIKOS_CHECK(suite, reader.write(14, replacement, sizeof(replacement)));
+  OSPLAY_CHECK(suite, reader.write(14, replacement, sizeof(replacement)));
   u8 written[sizeof(replacement)]{};
-  MIKOS_CHECK(suite, reader.read(14, written, sizeof(written)));
+  OSPLAY_CHECK(suite, reader.read(14, written, sizeof(written)));
   for (u32 index = 0; index < sizeof(written); ++index) {
-    MIKOS_CHECK(suite, written[index] == replacement[index]);
+    OSPLAY_CHECK(suite, written[index] == replacement[index]);
   }
-  MIKOS_CHECK(suite, reader.flush());
+  OSPLAY_CHECK(suite, reader.flush());
   std::array<u8, 3> bounded{};
-  MIKOS_CHECK(suite, reader.read(14, std::span{bounded}));
-  MIKOS_CHECK(suite, bounded[0] == replacement[0]);
-  MIKOS_CHECK(suite, reader.write(14, std::span<const u8>{bounded}));
-  MIKOS_CHECK(suite, reader.read(reader.size(), std::span<u8>{}));
-  MIKOS_CHECK(suite, !reader.read(reader.size() + 1, std::span<u8>{}));
-  MIKOS_CHECK(suite, !reader.read(reader.size() - 1, std::span{bounded}));
+  OSPLAY_CHECK(suite, reader.read(14, std::span{bounded}));
+  OSPLAY_CHECK(suite, bounded[0] == replacement[0]);
+  OSPLAY_CHECK(suite, reader.write(14, std::span<const u8>{bounded}));
+  OSPLAY_CHECK(suite, reader.read(reader.size(), std::span<u8>{}));
+  OSPLAY_CHECK(suite, !reader.read(reader.size() + 1, std::span<u8>{}));
+  OSPLAY_CHECK(suite, !reader.read(reader.size() - 1, std::span{bounded}));
   device.fail(true);
   reader.invalidate();
-  MIKOS_CHECK(suite, !reader.read(0, output, 1));
+  OSPLAY_CHECK(suite, !reader.read(0, output, 1));
   return suite.finish();
 }

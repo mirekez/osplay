@@ -1,6 +1,6 @@
 #include <drivers/net/net.hpp>
 
-namespace mikos::drivers::net {
+namespace osplay::drivers::net {
 namespace {
 volatile u32* const regs = reinterpret_cast<volatile u32*>(0x10016000);
 alignas(64) u8 rx[1536];

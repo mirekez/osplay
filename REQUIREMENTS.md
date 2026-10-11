@@ -1,4 +1,4 @@
-# mikOS Operating System Requirements
+# OSplay Operating System Requirements
 
 Status: initial architecture baseline  
 Language: C++26 and minimal architecture-specific assembly  
@@ -11,7 +11,7 @@ inputs are recorded in [doc/linux-reference.md](doc/linux-reference.md).
 
 ## 1. Purpose and scope
 
-Mikos is a small, test-driven, Unix-like operating system that exposes Linux
+OSplay is a small, test-driven, Unix-like operating system that exposes Linux
 system-call ABIs while keeping policy, drivers, filesystems, networking, and
 other services outside the kernel.
 
@@ -242,10 +242,10 @@ Privileged stubs MUST be capability-scoped, bounded, non-blocking, and tested.
   version for i386, x86-64, riscv32, and riscv64. The initial version is Linux
   6.19 at the commit recorded above.
 - The importer MUST accept the Linux source root as an explicit command-line
-  argument or `MIKOS_LINUX_SOURCE` value. It MUST NOT embed a developer home
+  argument or `OSPLAY_LINUX_SOURCE` value. It MUST NOT embed a developer home
   directory in generated output or production builds.
 - Authoritative imported inputs and their SHA-256 hashes MUST be snapshotted in
-  the Mikos repository so a normal build does not depend on the external Linux
+  the OSplay repository so a normal build does not depend on the external Linux
   checkout. Regeneration MUST fail on an unexpected hash unless the pin and
   manifest are deliberately updated together.
 - Generated entries MUST include syscall number, canonical name, argument
@@ -332,7 +332,7 @@ An exclusion MAY later be removed only with behavioral tests.
   regenerated.
 - Linux-derived UAPI material MUST retain its applicable SPDX identifier and
   notices. Linux implementation code is a behavioral reference and MUST NOT be
-  copied into differently licensed Mikos code without an explicit licensing
+  copied into differently licensed OSplay code without an explicit licensing
   decision and provenance record.
 - Warnings selected by the project are errors in CI.
 - Linker maps and machine-readable binary inspection reports MUST be retained as

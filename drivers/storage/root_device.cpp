@@ -1,19 +1,19 @@
 #include <drivers/storage/root_device.hpp>
 
-#ifdef MIKOS_TRIBE_INTERACTIVE
-#include <mikos/kernel.hpp>
+#ifdef OSPLAY_TRIBE_INTERACTIVE
+#include <osplay/kernel.hpp>
 #endif
 
-#ifdef MIKOS_TRIBE
+#ifdef OSPLAY_TRIBE
 #include <drivers/storage/tribe_sd.hpp>
 #else
 #include <drivers/storage/virtio_block.hpp>
 #endif
 
-namespace mikos::drivers::storage::root_device {
+namespace osplay::drivers::storage::root_device {
 
 bool Device::initialize() {
-#ifdef MIKOS_TRIBE
+#ifdef OSPLAY_TRIBE
   return tribe_sd::initialize();
 #else
   return virtio_block::initialize();
@@ -21,7 +21,7 @@ bool Device::initialize() {
 }
 
 u64 Device::sector_count() const {
-#ifdef MIKOS_TRIBE
+#ifdef OSPLAY_TRIBE
   return tribe_sd::sector_count();
 #else
   return virtio_block::sector_count();
@@ -29,8 +29,8 @@ u64 Device::sector_count() const {
 }
 
 bool Device::read_sector(u64 sector, u8* output) {
-#ifdef MIKOS_TRIBE
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef OSPLAY_TRIBE
+#ifdef OSPLAY_TRIBE_INTERACTIVE
   // Metadata lookups also run with interrupts masked during exec/restore.
   // Only service packets here: poll() does not access storage or switch the
   // current process, so the filesystem operation cannot be reentered.
@@ -48,8 +48,8 @@ bool Device::read_sector(u64 sector, u8* output) {
 }
 
 bool Device::read_sectors(u64 sector, u8* output, u32 byte_count) {
-#ifdef MIKOS_TRIBE
-#ifdef MIKOS_TRIBE_MULTICORE
+#ifdef OSPLAY_TRIBE
+#ifdef OSPLAY_TRIBE_MULTICORE
   // Tribe signals SD DMA completion before its external cache invalidation is
   // guaranteed to have retired on every core. Reused kernel buffers can
   // therefore expose data from an earlier read. Keep those immediately reused
@@ -73,7 +73,7 @@ bool Device::read_sectors(u64 sector, u8* output, u32 byte_count) {
     return true;
   }
 #endif
-#ifdef MIKOS_TRIBE_INTERACTIVE
+#ifdef OSPLAY_TRIBE_INTERACTIVE
   if (output == nullptr || byte_count == 0 ||
       byte_count % sector_size != 0 || sector > 0xffffffffu ||
       byte_count / sector_size > 0xffffffffu - sector) {
@@ -108,7 +108,7 @@ bool Device::write_sector(u64 sector, const u8* input) {
 }
 
 bool Device::write_sectors(u64 sector, const u8* input, u32 byte_count) {
-#ifdef MIKOS_TRIBE
+#ifdef OSPLAY_TRIBE
   return sector <= 0xffffffffu &&
          tribe_sd::write_blocks(static_cast<u32>(sector), input, byte_count);
 #else
@@ -117,11 +117,11 @@ bool Device::write_sectors(u64 sector, const u8* input, u32 byte_count) {
 }
 
 bool Device::flush() {
-#ifdef MIKOS_TRIBE
+#ifdef OSPLAY_TRIBE
   return tribe_sd::flush();
 #else
   return virtio_block::flush();
 #endif
 }
 
-}  // namespace mikos::drivers::storage::root_device
+}  // namespace osplay::drivers::storage::root_device

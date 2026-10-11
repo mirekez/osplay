@@ -14,7 +14,7 @@ addresses = [
     int(row.split()[2])
     for row in rows
     if row.startswith("global ")
-    and row.split()[1] == "_ZN5mikos16extreme_platform9root_diskE"
+    and row.split()[1] == "_ZN6osplay16extreme_platform9root_diskE"
 ]
 if len(addresses) != 1:
     raise SystemExit("native root-disk symbol missing or ambiguous")

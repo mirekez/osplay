@@ -1,15 +1,15 @@
-#include <mikos/net/tcp_table.hpp>
+#include <osplay/net/tcp_table.hpp>
 #include <support/test.hpp>
 
 int main() {
-  using namespace mikos;
-  using namespace mikos::network;
+  using namespace osplay;
+  using namespace osplay::network;
   test::Suite suite{"net/tcp_table"};
   SocketTable sockets;
   TcpTableText text;
 
   format_tcp_table(sockets.slots(), text);
-  MIKOS_CHECK(suite, std::string_view(text.data()) == tcp_table_header);
+  OSPLAY_CHECK(suite, std::string_view(text.data()) == tcp_table_header);
 
   // Preserve Linux's byte order, uppercase hex, zero padding, state codes,
   // consecutive display rows, and handle-based inodes across skipped slots.
@@ -30,7 +30,7 @@ int main() {
   format_tcp_table(slots, text);
   const auto rows =
       std::string_view(text.data()).substr(tcp_table_header.size());
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               rows ==
                   "   0: 024CA8C0:0016 0F02000A:ABCD 0A 00000000:00000000 "
                   "00:00000000 00000000   0        0 2\n"
@@ -49,10 +49,10 @@ int main() {
   }
   format_tcp_table(slots, text);
   const std::string_view full{text.data()};
-  MIKOS_CHECK(suite, text.back() == '\0');
-  MIKOS_CHECK(suite, text.size() < text.capacity());
-  MIKOS_CHECK(suite, std::ranges::count(full, '\n') == socket_capacity + 1);
-  MIKOS_CHECK(
+  OSPLAY_CHECK(suite, text.back() == '\0');
+  OSPLAY_CHECK(suite, text.size() < text.capacity());
+  OSPLAY_CHECK(suite, std::ranges::count(full, '\n') == socket_capacity + 1);
+  OSPLAY_CHECK(
       suite,
       full.ends_with("   12: FFFFFFFF:FFFF 00000000:0000 0A 00000000:00000000 "
                      "00:00000000 00000000   0        0 13\n"));
@@ -60,7 +60,7 @@ int main() {
   // Reusing the buffer after all sockets close must discard every old row.
   std::ranges::fill(slots, SocketSlot{});
   format_tcp_table(slots, text);
-  MIKOS_CHECK(suite, std::string_view(text.data()) == tcp_table_header);
-  MIKOS_CHECK(suite, text.size() == tcp_table_header.size() + 1);
+  OSPLAY_CHECK(suite, std::string_view(text.data()) == tcp_table_header);
+  OSPLAY_CHECK(suite, text.size() == tcp_table_header.size() + 1);
   return suite.finish();
 }

@@ -1,6 +1,6 @@
 #include <drivers/net/virtio_net.hpp>
 
-namespace mikos::drivers::net {
+namespace osplay::drivers::net {
 namespace {
 
 using virtio::Feature;
@@ -186,4 +186,4 @@ MacAddress mac_address() { return device.mac_address(); }
 bool receive(Frame& frame) { return device.receive(frame); }
 bool transmit(const u8* frame, u32 size) { return device.transmit(frame, size); }
 
-}  // namespace mikos::drivers::net
+}  // namespace osplay::drivers::net

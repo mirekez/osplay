@@ -1,8 +1,8 @@
-# mikOS
+# OSplay
 
 Lightweight C++ replacement for Linux without MMU/TLB, exceptions and interrupts to fit in 512kB.
 
-Mikos is an experimental, test-driven operating system with a minimal
+OSplay is an experimental, test-driven operating system with a minimal
 mechanism-only kernel, flat-memory architecture profiles, polling instead of
 ordinary device interrupts, and generated Linux syscall ABI tables.
 
@@ -24,7 +24,7 @@ Start with:
 The current proof of concept boots on the supplied RV32 QEMU, enters a
 PMP-protected flat U-mode region, mounts an ext4 root image, and loads static
 BusyBox and stress-ng ELFs from `/bin` in sequence. BusyBox prints
-`MIKOS_BUSYBOX_OK`; stress-ng then runs a
+`OSPLAY_BUSYBOX_OK`; stress-ng then runs a
 verified four-operation `cpu/loop` workload and reports its own metrics and
 success. A sole CLINT scheduling timer also demonstrably preempts an
 unmodified, non-cooperative U-mode loop before starting BusyBox; the PLIC and
@@ -40,6 +40,16 @@ listed in the network POC document.
 
 ## Build and test
 
+The repository is `mirekez/osplay`; the display name is OSplay, C++ namespaces
+and include paths use `osplay`, and build flags/log markers use `OSPLAY`.
+The local checkout directory can keep its existing name.
+
+After migrating the project name, rebuild from a fresh `build/` directory
+(move existing generated outputs aside rather than deleting them). Previously
+patched userspace sources and simulator binaries are not compatible with the
+renamed build flags and protocol-test markers. If using a custom SSH identity,
+preserve it and install it as `build/osplay_ssh_key` before rebuilding.
+
 Create the local Conda environment and set `RISCV_HOME` to your RISC-V
 toolchain installation (defaults to `~/riscv`):
 
@@ -52,7 +62,7 @@ make test
 make kernel
 ```
 
-`make` runs the regressions and builds `build/mikos-rv32.elf`. Clang compiles
+`make` runs the regressions and builds `build/osplay-rv32.elf`. Clang compiles
 the kernel; the cross-toolchain supplies C headers and GNU binutils. Either
 `$RISCV_HOME/bin/riscv32-unknown-linux-gnu-*` (Linux/glibc) or
 `$RISCV_HOME/bin/riscv32-unknown-elf-*` (bare-metal/Newlib) works; the build
@@ -104,7 +114,7 @@ submodules. If absent, obtain it with
 `git clone --recursive https://github.com/riscv-collab/riscv-gnu-toolchain "$RISCV_TOOLCHAIN_SOURCE"`.
 
 No Linux guest kernel is built or booted. BusyBox and Dropbear use Linux's
-userspace ABI, implemented by mikOS, so they still need a compatible C library.
+userspace ABI, implemented by OSplay, so they still need a compatible C library.
 The interactive launcher checks that the compiler can statically link an
 RV32/ILP32 glibc program before rebuilding the simulator. Hard-float `ilp32d`
 toolchains are unsuitable for the current Tribe profile.
@@ -137,7 +147,7 @@ working tree. `CPPHDL_TOOLCHAIN` overrides its default compiler environment,
 local patch stack have been retired; CPU fixes belong in cpphdl itself.
 See [the migration notes](tests/tribe/cpphdl-fixes.md) for the changes and tests.
 
-`MIKOS:BAD_ELF` is a boot failure, even if the TAP connection and ext4 mount
+`OSPLAY:BAD_ELF` is a boot failure, even if the TAP connection and ext4 mount
 succeeded. Ensure cpphdl includes commit `590ffc4`, the load-retirement fix in
 `WritebackMem.h`:
 older simulators can lose a filesystem pointer during multiplication and fail
@@ -148,7 +158,7 @@ script to rebuild it. The migration notes describe the failure and regression.
 memory and disabled device interrupts through the polling UART, then stops
 before device initialization. It needs no disk, networking, or Linux userspace.
 
-`make tribe-kernel-test` boots mikOS directly on Tribe and verifies its C++
+`make tribe-kernel-test` boots OSplay directly on Tribe and verifies its C++
 container self-test, flat-memory/interrupt state, polling UART, ARP, and ICMP.
 It uses a rootless Ethernet peer and the bare-metal RV32 toolchain: no Linux
 kernel, Linux userspace, disk image, or TAP setup is needed. The runner stops
@@ -158,7 +168,7 @@ after the ICMP reply, before the userspace root filesystem is needed.
 Tribe boot and kernel-network tests, and all existing BusyBox, ping, TCP, process, and SSH
 acceptance targets. It retains logs and a summary under
 `build/tests/tribe/results/` and returns failure if any test fails or is blocked.
-The userspace acceptance tests execute BusyBox/stress-ng/Dropbear **on mikOS**;
+The userspace acceptance tests execute BusyBox/stress-ng/Dropbear **on OSplay**;
 they do not boot Linux. Their current rootfs build still needs the RV32
 Linux/glibc cross-toolchain described above to build those Linux-ABI programs.
 
@@ -177,7 +187,7 @@ neighbor entry, and runs the selected cpphdl bridge on
 the log path and a command to stop the background bridge. Run the interactive
 launcher without sudo; sudo normally drops exported settings such as
 `CPPHDL_HOME`. With `CPPHDL_HOME` set, the launcher uses this bridge without passing
-the mikOS-specific command-line options that cpphdl's bridge does not accept.
+the OSplay-specific command-line options that cpphdl's bridge does not accept.
 TAP creation needs host `CAP_NET_ADMIN`; merely having the bridge source does
 not grant that permission. `TRIBE_ETH_TAP_SOCKET` and `TRIBE_INTERACTIVE_TAP`
 select another socket/interface; preserve these variables when invoking sudo

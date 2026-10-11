@@ -1,7 +1,7 @@
 # BusyBox compatibility test
 
 This directory owns the user-space workloads used by the current RV32 QEMU
-acceptance image. They are tests of MikOS's Linux compatibility surface, not
+acceptance image. They are tests of OSplay's Linux compatibility surface, not
 part of the kernel build implementation.
 
 The build is reproducible from the checked-in BusyBox configuration and pinned
@@ -23,10 +23,10 @@ detects this installation as well as `$RISCV_HOME/bin/riscv32-unknown-linux-gnu-
 Set `RISCV_LINUX_PREFIX` for a different prefix. The preflight statically links
 a small program to catch missing libraries or an incompatible target ABI.
 The bare-metal `riscv32-unknown-elf-*` tools suffice for `make kernel`.
-BusyBox and Dropbear run on mikOS using its Linux-compatible syscall ABI;
+BusyBox and Dropbear run on OSplay using its Linux-compatible syscall ABI;
 no Linux guest kernel is needed.
 
-The `tc` applet is disabled: mikOS does not implement its traffic-control
+The `tc` applet is disabled: OSplay does not implement its traffic-control
 interface, and the pinned applet depends on CBQ definitions removed from newer
 Linux headers.
 
@@ -54,12 +54,12 @@ Dropbear on port 22 with persistent on-demand host-key generation. The image's
 test-only authorized key can be replaced at
 `rootfs/root/.ssh/authorized_keys` before rebuilding.
 
-The build installs the versioned regression identity from `keys/mikos_ssh_key`
-at `build/mikos_ssh_key` when absent and adds its public key to the staged image's
+The build installs the versioned regression identity from `keys/osplay_ssh_key`
+at `build/osplay_ssh_key` when absent and adds its public key to the staged image's
 `authorized_keys`. This is a deliberately public test identity, suitable only for
 isolated regression guests. Existing local identities are preserved.
 `make dropbear-client` converts the identity to
-`build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear`, with mode 0600.
+`build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear`, with mode 0600.
 The rootfs target also prepares that converted key. If the client reports
 `Failed loading keyfile`, run `make dropbear-client` from the repository root.
 Generated copies stay in the ignored build directory; the OpenSSH fixture and
@@ -74,13 +74,13 @@ make -C tests/busybox \
   DROPBEAR_REFERENCE=/path/to/dropbear-2026.94.tar.bz2 rootfs
 ```
 
-This supplies the RV32 server and its boot service. MikOS's current network
+This supplies the RV32 server and its boot service. OSplay's current network
 POC still implements ARP/ICMP and UDP control descriptors only; serving an SSH
-connection under MikOS additionally requires the planned TCP stream socket,
+connection under OSplay additionally requires the planned TCP stream socket,
 `bind`/`listen`/`accept`, descriptor I/O, polling, and concurrent-process
 slice. A Linux RV32 runtime invoking `/sbin/init` can start this image's server
 now.
 
-The pinned stress-ng source snapshot and MikOS-only patch live under
+The pinned stress-ng source snapshot and OSplay-only patch live under
 `third_party/` and `patches/` here. The build copies the vendored source into
 the build directory before applying the patch; no submodule setup is needed.

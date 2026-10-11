@@ -16,7 +16,7 @@ class SharedKeyTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="extreme-shared-key-")
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name) / "mikos"
+        self.root = Path(self.temporary.name) / "osplay"
         for name in (
             "support/extreme/prepare_ssh_key.sh",
             "support/extreme/prepare_rootfs.sh",
@@ -34,9 +34,9 @@ class SharedKeyTest(unittest.TestCase):
         (self.base / "host/dropbearconvert").symlink_to(
             (BASE / "host/dropbearconvert").resolve()
         )
-        self.key = self.root / "build/mikos_ssh_key"
+        self.key = self.root / "build/osplay_ssh_key"
         self.converted = (
-            self.root / "build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear"
+            self.root / "build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear"
         )
         self.environment = dict(os.environ, EXTREME_BUILD_ROOT=str(self.base))
         for name in (
@@ -64,7 +64,7 @@ class SharedKeyTest(unittest.TestCase):
         self.run_script("prepare_ssh_key.sh")
         self.assertEqual(
             self.key.read_bytes(),
-            (ROOT / "tests/busybox/keys/mikos_ssh_key").read_bytes(),
+            (ROOT / "tests/busybox/keys/osplay_ssh_key").read_bytes(),
         )
         self.assertEqual(self.key.stat().st_mode & 0o777, 0o600)
         self.assertEqual(self.converted.stat().st_mode & 0o777, 0o600)

@@ -1,33 +1,33 @@
 #include <drivers/net/net.hpp>
-#include <mikos/kernel.hpp>
-#include <mikos/arch.hpp>
-#include <mikos/net/tcp.hpp>
+#include <osplay/kernel.hpp>
+#include <osplay/arch.hpp>
+#include <osplay/net/tcp.hpp>
 
 #include <support/test.hpp>
 
 namespace {
 
-mikos::u64 fake_time{};
+osplay::u64 fake_time{};
 
-constexpr mikos::MacAddress guest_mac{{2, 0, 0, 0, 0, 2}};
-constexpr mikos::MacAddress peer_mac{{2, 0, 0, 0, 0, 1}};
-constexpr mikos::Ipv4Address guest_ip{{10, 0, 2, 15}};
-constexpr mikos::Ipv4Address peer_ip{{10, 0, 2, 2}};
+constexpr osplay::MacAddress guest_mac{{2, 0, 0, 0, 0, 2}};
+constexpr osplay::MacAddress peer_mac{{2, 0, 0, 0, 0, 1}};
+constexpr osplay::Ipv4Address guest_ip{{10, 0, 2, 15}};
+constexpr osplay::Ipv4Address peer_ip{{10, 0, 2, 2}};
 
-alignas(4) mikos::u8 receive_frame[1536]{};
-mikos::u32 receive_size{};
+alignas(4) osplay::u8 receive_frame[1536]{};
+osplay::u32 receive_size{};
 bool receive_ready{};
-alignas(4) mikos::u8 transmitted_frame[1536]{};
-mikos::u32 transmitted_size{};
-mikos::u32 transmit_count{};
-mikos::u32 transmit_failures{};
+alignas(4) osplay::u8 transmitted_frame[1536]{};
+osplay::u32 transmitted_size{};
+osplay::u32 transmit_count{};
+osplay::u32 transmit_failures{};
 
-void make_packet(mikos::u8 flags, mikos::u32 sequence,
-                 mikos::u32 acknowledgement,
-                 const mikos::u8* payload = nullptr,
-                 mikos::u32 payload_size = 0,
-                 mikos::u16 peer_port = 49152) {
-  using namespace mikos;
+void make_packet(osplay::u8 flags, osplay::u32 sequence,
+                 osplay::u32 acknowledgement,
+                 const osplay::u8* payload = nullptr,
+                 osplay::u32 payload_size = 0,
+                 osplay::u16 peer_port = 49152) {
+  using namespace osplay;
   const u32 headers =
       sizeof(EthernetHeader) + sizeof(Ipv4Header) + sizeof(TcpHeader);
   for (u32 i = 0; i < headers + payload_size; ++i) {
@@ -66,8 +66,8 @@ void make_packet(mikos::u8 flags, mikos::u32 sequence,
   receive_ready = true;
 }
 
-[[nodiscard]] bool transmitted_tcp(mikos::TcpView& view) {
-  const auto packet = mikos::parse_tcp(
+[[nodiscard]] bool transmitted_tcp(osplay::TcpView& view) {
+  const auto packet = osplay::parse_tcp(
       std::span{transmitted_frame, transmitted_size}, peer_ip);
   if (!packet) return false;
   view = *packet;
@@ -75,8 +75,8 @@ void make_packet(mikos::u8 flags, mikos::u32 sequence,
 }
 
 [[nodiscard]] bool contains(const char* text, const char* needle) {
-  for (mikos::u32 start = 0; text[start] != '\0'; ++start) {
-    mikos::u32 index = 0;
+  for (osplay::u32 start = 0; text[start] != '\0'; ++start) {
+    osplay::u32 index = 0;
     while (needle[index] != '\0' && text[start + index] == needle[index]) {
       ++index;
     }
@@ -89,9 +89,9 @@ void make_packet(mikos::u8 flags, mikos::u32 sequence,
 
 }  // namespace
 
-namespace mikos::arch { u64 time_ticks() { return fake_time; } }
+namespace osplay::arch { u64 time_ticks() { return fake_time; } }
 
-namespace mikos::drivers::net {
+namespace osplay::drivers::net {
 
 bool initialize() { return true; }
 
@@ -122,78 +122,78 @@ bool transmit(const u8* frame, u32 size) {
   return true;
 }
 
-}  // namespace mikos::drivers::net
+}  // namespace osplay::drivers::net
 
-namespace mikos {
+namespace osplay {
 
 void uart_put(char) {}
 void uart_write(const char*, u32) {}
 void write_text(const char*) {}
 void write_u32(u32) {}
 
-}  // namespace mikos
+}  // namespace osplay
 
 int main() {
-  using namespace mikos;
-  using namespace mikos::network;
+  using namespace osplay;
+  using namespace osplay::network;
   test::Suite suite{"net/stack"};
 
-  MIKOS_CHECK(suite, initialize());
+  OSPLAY_CHECK(suite, initialize());
   const auto listener = socket_open(abi::socket::Type::stream);
-  MIKOS_CHECK(suite, listener.result == SocketResult::success);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite, listener.result == SocketResult::success);
+  OSPLAY_CHECK(suite,
               socket_bind(listener.handle, Endpoint{{{0, 0, 0, 0}}, 22}) ==
                   SocketResult::success);
-  MIKOS_CHECK(suite, socket_listen(listener.handle, 2) ==
+  OSPLAY_CHECK(suite, socket_listen(listener.handle, 2) ==
                          SocketResult::success);
-  MIKOS_CHECK(suite, contains(tcp_table(), "00000000:0016"));
-  MIKOS_CHECK(suite, contains(tcp_table(), " 0A "));
+  OSPLAY_CHECK(suite, contains(tcp_table(), "00000000:0016"));
+  OSPLAY_CHECK(suite, contains(tcp_table(), " 0A "));
 
   make_packet(tcp_syn, 1000, 0);
   poll();
-  MIKOS_CHECK(suite, transmit_count == 1);
+  OSPLAY_CHECK(suite, transmit_count == 1);
   TcpView syn_ack{};
-  MIKOS_CHECK(suite, transmitted_tcp(syn_ack));
-  MIKOS_CHECK(suite, syn_ack.tcp.flags == (tcp_syn | tcp_ack));
-  MIKOS_CHECK(suite, net32(syn_ack.tcp.acknowledgement) == 1001);
+  OSPLAY_CHECK(suite, transmitted_tcp(syn_ack));
+  OSPLAY_CHECK(suite, syn_ack.tcp.flags == (tcp_syn | tcp_ack));
+  OSPLAY_CHECK(suite, net32(syn_ack.tcp.acknowledgement) == 1001);
   const u32 server_sequence = net32(syn_ack.tcp.sequence);
 
   make_packet(tcp_ack, 1001, server_sequence + 1);
   poll();
-  MIKOS_CHECK(suite, socket_readable(listener.handle));
+  OSPLAY_CHECK(suite, socket_readable(listener.handle));
   const auto accepted = socket_accept(listener.handle);
-  MIKOS_CHECK(suite, accepted.result == SocketResult::success);
-  MIKOS_CHECK(suite, accepted.peer.port == 49152);
-  MIKOS_CHECK(suite, accepted.peer.address == peer_ip);
+  OSPLAY_CHECK(suite, accepted.result == SocketResult::success);
+  OSPLAY_CHECK(suite, accepted.peer.port == 49152);
+  OSPLAY_CHECK(suite, accepted.peer.address == peer_ip);
 
   const u8 request[]{'p', 'i', 'n', 'g'};
   make_packet(tcp_ack | tcp_psh, 1001, server_sequence + 1, request,
               sizeof(request));
   poll();
-  MIKOS_CHECK(suite, transmit_count == 2);
+  OSPLAY_CHECK(suite, transmit_count == 2);
   TcpView data_ack{};
-  MIKOS_CHECK(suite, transmitted_tcp(data_ack));
-  MIKOS_CHECK(suite, data_ack.tcp.flags == tcp_ack);
-  MIKOS_CHECK(suite, net32(data_ack.tcp.acknowledgement) == 1005);
+  OSPLAY_CHECK(suite, transmitted_tcp(data_ack));
+  OSPLAY_CHECK(suite, data_ack.tcp.flags == tcp_ack);
+  OSPLAY_CHECK(suite, net32(data_ack.tcp.acknowledgement) == 1005);
   u8 input[8]{};
   const auto read_result = socket_read(accepted.handle, input, sizeof(input));
-  MIKOS_CHECK(suite, read_result.result == SocketResult::success);
-  MIKOS_CHECK(suite, read_result.size == sizeof(request));
-  MIKOS_CHECK(suite, input[0] == 'p' && input[3] == 'g');
+  OSPLAY_CHECK(suite, read_result.result == SocketResult::success);
+  OSPLAY_CHECK(suite, read_result.size == sizeof(request));
+  OSPLAY_CHECK(suite, input[0] == 'p' && input[3] == 'g');
 
   const u8 response[]{'p', 'o', 'n', 'g'};
   const auto write_result =
       socket_write(accepted.handle, response, sizeof(response));
-  MIKOS_CHECK(suite, write_result.result == SocketResult::success);
-  MIKOS_CHECK(suite, write_result.size == sizeof(response));
+  OSPLAY_CHECK(suite, write_result.result == SocketResult::success);
+  OSPLAY_CHECK(suite, write_result.size == sizeof(response));
   TcpView response_view{};
-  MIKOS_CHECK(suite, transmitted_tcp(response_view));
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite, transmitted_tcp(response_view));
+  OSPLAY_CHECK(suite,
               response_view.tcp.flags == (tcp_ack | tcp_psh));
-  MIKOS_CHECK(suite, net32(response_view.tcp.sequence) ==
+  OSPLAY_CHECK(suite, net32(response_view.tcp.sequence) ==
                          server_sequence + 1);
-  MIKOS_CHECK(suite, response_view.payload.size() == sizeof(response));
-  MIKOS_CHECK(suite, response_view.payload[1] == 'o');
+  OSPLAY_CHECK(suite, response_view.payload.size() == sizeof(response));
+  OSPLAY_CHECK(suite, response_view.payload[1] == 'o');
 
   // Outbound payload is retained until a cumulative ACK covers it. This is
   // essential for SSH, which emits adjacent identification/KEX records and
@@ -202,20 +202,20 @@ int main() {
   for (u32 i = 0; i < 100; ++i) {
     poll();
   }
-  MIKOS_CHECK(suite, transmit_count == before_response_retry);
+  OSPLAY_CHECK(suite, transmit_count == before_response_retry);
   fake_time += tcp_initial_rto;
   poll();
-  MIKOS_CHECK(suite, transmit_count == before_response_retry + 1);
+  OSPLAY_CHECK(suite, transmit_count == before_response_retry + 1);
   TcpView response_retry{};
-  MIKOS_CHECK(suite, transmitted_tcp(response_retry));
-  MIKOS_CHECK(suite, net32(response_retry.tcp.sequence) ==
+  OSPLAY_CHECK(suite, transmitted_tcp(response_retry));
+  OSPLAY_CHECK(suite, net32(response_retry.tcp.sequence) ==
                          server_sequence + 1);
-  MIKOS_CHECK(suite, response_retry.payload.size() == sizeof(response));
+  OSPLAY_CHECK(suite, response_retry.payload.size() == sizeof(response));
   const u32 after_first_retry = transmit_count;
   for (u32 i = 0; i < 100; ++i) {
     poll();
   }
-  MIKOS_CHECK(suite, transmit_count == after_first_retry);
+  OSPLAY_CHECK(suite, transmit_count == after_first_retry);
 
   // Two writes occupy distinct sequence-keyed slots. A cumulative ACK of the
   // first must leave only the second eligible for retransmission.
@@ -225,55 +225,55 @@ int main() {
   const u8 failed_write[]{'?'};
   const auto failed_write_result =
       socket_write(accepted.handle, failed_write, sizeof(failed_write));
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               failed_write_result.result == SocketResult::would_block);
   const u32 after_failed_write = transmit_count;
   for (u32 i = 0; i < 300; ++i) {
     poll();
   }
-  MIKOS_CHECK(suite, transmit_count == after_failed_write);
+  OSPLAY_CHECK(suite, transmit_count == after_failed_write);
   const u8 first_followup[]{'a', 'b', 'c'};
   const u8 second_followup[]{'d', 'e'};
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               socket_write(accepted.handle, first_followup,
                            sizeof(first_followup)).size ==
                   sizeof(first_followup));
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               socket_write(accepted.handle, second_followup,
                            sizeof(second_followup)).size ==
                   sizeof(second_followup));
   TcpView second_followup_view{};
-  MIKOS_CHECK(suite, transmitted_tcp(second_followup_view));
-  MIKOS_CHECK(suite, net32(second_followup_view.tcp.sequence) ==
+  OSPLAY_CHECK(suite, transmitted_tcp(second_followup_view));
+  OSPLAY_CHECK(suite, net32(second_followup_view.tcp.sequence) ==
                          server_sequence + 8);
   const u32 before_ordered_retry = transmit_count;
   for (u32 i = 0; i < 100; ++i) {
     poll();
   }
-  MIKOS_CHECK(suite, transmit_count == before_ordered_retry);
+  OSPLAY_CHECK(suite, transmit_count == before_ordered_retry);
   fake_time += tcp_initial_rto;
   poll();
-  MIKOS_CHECK(suite, transmit_count == before_ordered_retry + 1);
+  OSPLAY_CHECK(suite, transmit_count == before_ordered_retry + 1);
   TcpView first_followup_retry{};
-  MIKOS_CHECK(suite, transmitted_tcp(first_followup_retry));
-  MIKOS_CHECK(suite, net32(first_followup_retry.tcp.sequence) ==
+  OSPLAY_CHECK(suite, transmitted_tcp(first_followup_retry));
+  OSPLAY_CHECK(suite, net32(first_followup_retry.tcp.sequence) ==
                          server_sequence + 5);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               first_followup_retry.payload.size() == sizeof(first_followup));
 
   const u32 before_first_followup_ack = transmit_count;
   make_packet(tcp_ack, 1005, server_sequence + 8);
   poll();
-  MIKOS_CHECK(suite, transmit_count == before_first_followup_ack);
+  OSPLAY_CHECK(suite, transmit_count == before_first_followup_ack);
   fake_time += tcp_initial_rto;
   poll();
-  MIKOS_CHECK(suite, transmit_count == before_first_followup_ack + 1);
+  OSPLAY_CHECK(suite, transmit_count == before_first_followup_ack + 1);
   TcpView second_retry{};
-  MIKOS_CHECK(suite, transmitted_tcp(second_retry));
-  MIKOS_CHECK(suite, net32(second_retry.tcp.sequence) ==
+  OSPLAY_CHECK(suite, transmitted_tcp(second_retry));
+  OSPLAY_CHECK(suite, net32(second_retry.tcp.sequence) ==
                          server_sequence + 8);
-  MIKOS_CHECK(suite, second_retry.payload.size() == sizeof(second_followup));
-  MIKOS_CHECK(suite, second_retry.payload[0] == 'd');
+  OSPLAY_CHECK(suite, second_retry.payload.size() == sizeof(second_followup));
+  OSPLAY_CHECK(suite, second_retry.payload[0] == 'd');
   make_packet(tcp_ack, 1005, server_sequence + 10);
   poll();
 
@@ -286,16 +286,16 @@ int main() {
               sizeof(slow_request));
   const u32 before_failed_ack = transmit_count;
   poll();
-  MIKOS_CHECK(suite, transmit_count == before_failed_ack);
+  OSPLAY_CHECK(suite, transmit_count == before_failed_ack);
   poll();
-  MIKOS_CHECK(suite, transmit_count == before_failed_ack + 1);
+  OSPLAY_CHECK(suite, transmit_count == before_failed_ack + 1);
   TcpView retried_ack{};
-  MIKOS_CHECK(suite, transmitted_tcp(retried_ack));
-  MIKOS_CHECK(suite, retried_ack.tcp.flags == tcp_ack);
-  MIKOS_CHECK(suite, net32(retried_ack.tcp.acknowledgement) == 1006);
+  OSPLAY_CHECK(suite, transmitted_tcp(retried_ack));
+  OSPLAY_CHECK(suite, retried_ack.tcp.flags == tcp_ack);
+  OSPLAY_CHECK(suite, net32(retried_ack.tcp.acknowledgement) == 1006);
   poll();
-  MIKOS_CHECK(suite, transmit_count == before_failed_ack + 1);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite, transmit_count == before_failed_ack + 1);
+  OSPLAY_CHECK(suite,
               socket_read(accepted.handle, input, sizeof(input)).size == 1);
 
   // Every pending transmit slot is usable; failed capacity checks must not
@@ -304,47 +304,47 @@ int main() {
   const u8 marker = 0xa5;
   for (u32 round = 0; round < 2; ++round) {
     for (u32 i = 0; i < transmit_capacity; ++i)
-      MIKOS_CHECK(suite, socket_write(accepted.handle, &marker, 1).size == 1);
-    MIKOS_CHECK(suite, socket_write(accepted.handle, &marker, 1).result == SocketResult::would_block);
+      OSPLAY_CHECK(suite, socket_write(accepted.handle, &marker, 1).size == 1);
+    OSPLAY_CHECK(suite, socket_write(accepted.handle, &marker, 1).result == SocketResult::would_block);
     TcpView last{};
-    MIKOS_CHECK(suite, transmitted_tcp(last));
-    MIKOS_CHECK(suite, net32(last.tcp.sequence) == acknowledged_output + transmit_capacity - 1);
+    OSPLAY_CHECK(suite, transmitted_tcp(last));
+    OSPLAY_CHECK(suite, net32(last.tcp.sequence) == acknowledged_output + transmit_capacity - 1);
     acknowledged_output += transmit_capacity;
     make_packet(tcp_ack, 1006, acknowledged_output);
     poll();
   }
   make_packet(tcp_ack | tcp_fin, 1006, acknowledged_output);
   poll();
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               socket_read(accepted.handle, input, sizeof(input)).result ==
                   SocketResult::end_of_file);
-  MIKOS_CHECK(suite, socket_writable(accepted.handle));
+  OSPLAY_CHECK(suite, socket_writable(accepted.handle));
   const u8 half_close_response[]{'!'};
   const auto half_close_write =
       socket_write(accepted.handle, half_close_response,
                    sizeof(half_close_response));
-  MIKOS_CHECK(suite, half_close_write.result == SocketResult::success);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite, half_close_write.result == SocketResult::success);
+  OSPLAY_CHECK(suite,
               half_close_write.size == sizeof(half_close_response));
   TcpView half_close_view{};
-  MIKOS_CHECK(suite, transmitted_tcp(half_close_view));
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite, transmitted_tcp(half_close_view));
+  OSPLAY_CHECK(suite,
               half_close_view.tcp.flags == (tcp_ack | tcp_psh));
-  MIKOS_CHECK(suite, half_close_view.payload.size() == 1);
-  MIKOS_CHECK(suite, half_close_view.payload[0] == '!');
+  OSPLAY_CHECK(suite, half_close_view.payload.size() == 1);
+  OSPLAY_CHECK(suite, half_close_view.payload[0] == '!');
   make_packet(tcp_ack, 1007, acknowledged_output + 1);
   poll();
-  MIKOS_CHECK(suite, socket_close(accepted.handle) == SocketResult::success);
+  OSPLAY_CHECK(suite, socket_close(accepted.handle) == SocketResult::success);
   TcpView final_fin{};
-  MIKOS_CHECK(suite, transmitted_tcp(final_fin));
-  MIKOS_CHECK(suite, final_fin.tcp.flags == (tcp_fin | tcp_ack));
+  OSPLAY_CHECK(suite, transmitted_tcp(final_fin));
+  OSPLAY_CHECK(suite, final_fin.tcp.flags == (tcp_fin | tcp_ack));
   make_packet(tcp_ack, 1007, acknowledged_output + 2);
   poll();
   const u32 before_closed_polling = transmit_count;
   for (u32 i = 0; i < 300; ++i) {
     poll();
   }
-  MIKOS_CHECK(suite, transmit_count == before_closed_polling);
+  OSPLAY_CHECK(suite, transmit_count == before_closed_polling);
 
   // A reconnect may already have timed out while the previous process was
   // restored. Its queued SYNs elicit SYN-ACKs followed by host RSTs, without
@@ -355,45 +355,45 @@ int main() {
     make_packet(tcp_syn, sequence, 0, nullptr, 0, port);
     poll();
     TcpView reply{};
-    MIKOS_CHECK(suite, transmitted_tcp(reply));
-    MIKOS_CHECK(suite, reply.tcp.flags == (tcp_syn | tcp_ack));
-    MIKOS_CHECK(suite, net32(reply.tcp.acknowledgement) == sequence + 1);
+    OSPLAY_CHECK(suite, transmitted_tcp(reply));
+    OSPLAY_CHECK(suite, reply.tcp.flags == (tcp_syn | tcp_ack));
+    OSPLAY_CHECK(suite, net32(reply.tcp.acknowledgement) == sequence + 1);
     make_packet(tcp_syn, sequence, 0, nullptr, 0, port);
     poll();
     make_packet(tcp_rst, sequence + 1, 0, nullptr, 0, port);
     poll();
-    MIKOS_CHECK(suite, !socket_readable(listener.handle));
-    MIKOS_CHECK(suite, socket_accept(listener.handle).result ==
+    OSPLAY_CHECK(suite, !socket_readable(listener.handle));
+    OSPLAY_CHECK(suite, socket_accept(listener.handle).result ==
                            SocketResult::would_block);
-    MIKOS_CHECK(suite, !contains(tcp_table(), " 03 "));
+    OSPLAY_CHECK(suite, !contains(tcp_table(), " 03 "));
   }
 
   // The original listener must still accept a fresh connection and data.
   make_packet(tcp_syn, 9000, 0);
   poll();
   TcpView reconnect_reply{};
-  MIKOS_CHECK(suite, transmitted_tcp(reconnect_reply));
+  OSPLAY_CHECK(suite, transmitted_tcp(reconnect_reply));
   const u32 reconnect_sequence = net32(reconnect_reply.tcp.sequence);
   make_packet(tcp_ack | tcp_psh, 9001, reconnect_sequence + 1, request,
               sizeof(request));
   poll();
   const auto reconnected = socket_accept(listener.handle);
-  MIKOS_CHECK(suite, reconnected.result == SocketResult::success);
-  MIKOS_CHECK(suite, socket_read(reconnected.handle, input, sizeof(input)).size ==
+  OSPLAY_CHECK(suite, reconnected.result == SocketResult::success);
+  OSPLAY_CHECK(suite, socket_read(reconnected.handle, input, sizeof(input)).size ==
                          sizeof(request));
-  MIKOS_CHECK(suite, input[0] == 'p' && input[3] == 'g');
+  OSPLAY_CHECK(suite, input[0] == 'p' && input[3] == 'g');
   make_packet(tcp_rst, 9005, 0);
   poll();
-  MIKOS_CHECK(suite, socket_read(reconnected.handle, input, sizeof(input)).result ==
+  OSPLAY_CHECK(suite, socket_read(reconnected.handle, input, sizeof(input)).result ==
                          SocketResult::reset);
-  MIKOS_CHECK(suite, socket_close(reconnected.handle) == SocketResult::success);
-  MIKOS_CHECK(suite, socket_close(listener.handle) == SocketResult::success);
+  OSPLAY_CHECK(suite, socket_close(reconnected.handle) == SocketResult::success);
+  OSPLAY_CHECK(suite, socket_close(listener.handle) == SocketResult::success);
 
   const u32 before_corrupt = transmit_count;
   make_packet(tcp_syn, 2000, 0);
   receive_frame[receive_size - 1] ^= 1;
   poll();
-  MIKOS_CHECK(suite, transmit_count == before_corrupt);
+  OSPLAY_CHECK(suite, transmit_count == before_corrupt);
 
   return suite.finish();
 }

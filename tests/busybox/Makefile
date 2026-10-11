@@ -28,7 +28,7 @@ STRESS_NG_REFERENCE := third_party/stress-ng
 STRESS_NG_SOURCE := $(BUILD)/stress-ng-source
 STRESS_NG := $(STRESS_NG_SOURCE)/stress-ng
 STRESS_NG_ADDRESS := 0x81000000
-STRESS_NG_PATCH := patches/stress-ng-mikos.patch
+STRESS_NG_PATCH := patches/stress-ng-osplay.patch
 
 DROPBEAR_VERSION := 2026.94
 DROPBEAR_SHA256 := e098034a843699200c8c977a991fff73159735bf795d5f72ef672c41a6b1ae81
@@ -37,14 +37,14 @@ DROPBEAR_REFERENCE ?=
 DROPBEAR_SOURCE := $(BUILD)/dropbear-source
 DROPBEAR := $(DROPBEAR_SOURCE)/dropbear
 DROPBEAR_CONFIG := config/dropbear_localoptions.h
-DROPBEAR_PATCH := patches/dropbear-mikos.patch
+DROPBEAR_PATCH := patches/dropbear-osplay.patch
 DROPBEAR_ADDRESS := 0x81400000
 DROPBEAR_HOST_OUT := $(BUILD)/dropbear-host
 DROPBEAR_HOST_STAMP := $(DROPBEAR_HOST_OUT)/.built
-DROPBEAR_HOST_KEY := $(ROOT)/build/mikos_ssh_key
-DROPBEAR_TEST_KEY := keys/mikos_ssh_key
+DROPBEAR_HOST_KEY := $(ROOT)/build/osplay_ssh_key
+DROPBEAR_TEST_KEY := keys/osplay_ssh_key
 DROPBEAR_PUBLIC_KEY := $(DROPBEAR_HOST_KEY).pub
-DROPBEAR_CLIENT_KEY := $(DROPBEAR_HOST_OUT)/mikos_ssh_key.dropbear
+DROPBEAR_CLIENT_KEY := $(DROPBEAR_HOST_OUT)/osplay_ssh_key.dropbear
 
 ROOTFS_STAGE := $(BUILD)/rootfs
 ROOTFS_IMAGE := $(BUILD)/rootfs.ext4
@@ -102,7 +102,7 @@ $(STRESS_NG): $(STRESS_NG_SOURCE)/.source-ready
 	$(MAKE) -C $(STRESS_NG_SOURCE) -j$(JOBS) \
 		CC=$(RISCV_LINUX_PREFIX)gcc CXX=$(RISCV_LINUX_PREFIX)g++ \
 		STATIC=1 BUILD_SMALL=1 GARBAGE_COLLECT=1 \
-		CFLAGS=-DSTRESS_MIKOS \
+		CFLAGS=-DSTRESS_OSPLAY \
 		CPPFLAGS= CXXFLAGS= \
 		LDFLAGS='-Wl,-Ttext-segment=$(STRESS_NG_ADDRESS)' \
 		LIB_ACL= LIB_AIO= LIB_APPARMOR= LIB_BSD= LIB_CAP= \

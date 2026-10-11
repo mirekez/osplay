@@ -4,8 +4,8 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 if [[ -z "${TRIBE_INTERACTIVE_TAP:-}${TRIBE_ETH_TAP_SOCKET:-}${TRIBE_INTERACTIVE_HOST_ADDRESS:-}${TRIBE_INTERACTIVE_GUEST_ADDRESS:-}${TRIBE_INTERACTIVE_GUEST_MAC:-}" ]]; then
   exec bash "$root/tests/network/start_tap.sh" "$@"
 fi
-tap="${TRIBE_INTERACTIVE_TAP:-${MIKOS_TAP:-tap-mikos}}"
-socket="${TRIBE_ETH_TAP_SOCKET:-${MIKOS_TAP_SOCKET:-/tmp/mikos-tap.sock}}"
+tap="${TRIBE_INTERACTIVE_TAP:-${OSPLAY_TAP:-tap-osplay}}"
+socket="${TRIBE_ETH_TAP_SOCKET:-${OSPLAY_TAP_SOCKET:-/tmp/osplay-tap.sock}}"
 address="${TRIBE_INTERACTIVE_HOST_ADDRESS:-192.168.76.1}"
 guest="${TRIBE_INTERACTIVE_GUEST_ADDRESS:-192.168.76.2}"
 mac="${TRIBE_INTERACTIVE_GUEST_MAC:-02:00:00:00:00:02}"

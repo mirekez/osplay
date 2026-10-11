@@ -18,7 +18,7 @@ if [[ -e "$destination" ]]; then
 fi
 
 mkdir -p "$(dirname "$destination")"
-archive="$(mktemp /tmp/mikos-dropbear.XXXXXX.tar.bz2)"
+archive="$(mktemp /tmp/osplay-dropbear.XXXXXX.tar.bz2)"
 cleanup() {
   rm -f "$archive"
 }

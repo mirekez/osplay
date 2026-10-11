@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-namespace mikos::test {
+namespace osplay::test {
 
 class Suite {
  public:
@@ -28,7 +28,7 @@ class Suite {
   int failures_{};
 };
 
-}  // namespace mikos::test
+}  // namespace osplay::test
 
-#define MIKOS_CHECK(suite, expression) \
+#define OSPLAY_CHECK(suite, expression) \
   (suite).check(static_cast<bool>(expression), #expression)

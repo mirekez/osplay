@@ -1,7 +1,7 @@
 #include <drivers/storage/root_device.hpp>
 extern "C" unsigned char __rocket_disk_begin[], __rocket_disk_end[];
-extern "C" void* memcpy(void*, const void*, mikos::usize);
-namespace mikos::drivers::storage::root_device {
+extern "C" void* memcpy(void*, const void*, osplay::usize);
+namespace osplay::drivers::storage::root_device {
 bool Device::initialize() { return sector_count() != 0; }
 u64 Device::sector_count() const { return (__rocket_disk_end - __rocket_disk_begin) / 512; }
 bool Device::read_sector(u64 s, u8* p) { return read_sectors(s, p, 512); }

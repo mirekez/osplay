@@ -42,8 +42,8 @@ kernel-cxx-check: $(BUILD)/kernel/standard_containers
 $(BUILD)/kernel/standard_containers: kernel/standard_containers.cpp \
     $(ROOT)/kernel/cxx_arena.cpp $(ROOT)/kernel/cxx_runtime.cpp \
     $(ROOT)/kernel/cxx_smoke.cpp $(ROOT)/kernel/cxx_math.cpp $(KERNEL_CXX_READY) \
-    $(wildcard $(ROOT)/include/mikos/memory/*.hpp) \
-    $(ROOT)/include/mikos/container/standard.hpp Makefile \
+    $(wildcard $(ROOT)/include/osplay/memory/*.hpp) \
+    $(ROOT)/include/osplay/container/standard.hpp Makefile \
     $(ROOT)/support/kernel-cxx/flags.mk
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(KERNEL_CXX_HEADERS) -nostdlib++ \
@@ -62,7 +62,7 @@ x86-driver-check: $(ROOT)/drivers/net/virtio_pci_legacy.cpp \
 		$(ROOT)/drivers/net/net.hpp \
 		$(ROOT)/drivers/net/virtio.hpp \
 		$(ROOT)/drivers/net/virtio_net.hpp \
-		$(ROOT)/include/mikos/net/ethernet.hpp
+		$(ROOT)/include/osplay/net/ethernet.hpp
 	$(CXX) --target=i386-unknown-elf -m32 -std=c++2c -ffreestanding \
 		-fno-exceptions -fno-rtti -Wall -Wextra -Werror \
 		-I$(ROOT) -I$(ROOT)/include -fsyntax-only $<
@@ -96,8 +96,8 @@ $(BUILD)/kernel/session_exit_test: kernel/session_exit_test.cpp \
 		-MMD -MP -MF $@.d $< $(LDFLAGS) -Wl,--gc-sections -o $@
 
 $(BUILD)/net/stack_test: net/stack_test.cpp $(ROOT)/network/stack.cpp \
-		$(ROOT)/include/mikos/net/socket.hpp \
-		$(ROOT)/include/mikos/net/tcp.hpp support/test.hpp
+		$(ROOT)/include/osplay/net/socket.hpp \
+		$(ROOT)/include/osplay/net/tcp.hpp support/test.hpp
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -MF $@.d \
 		net/stack_test.cpp $(ROOT)/network/stack.cpp $(LDFLAGS) -o $@
@@ -105,8 +105,8 @@ $(BUILD)/net/stack_test: net/stack_test.cpp $(ROOT)/network/stack.cpp \
 $(BUILD)/drivers/root_device_poll_test: drivers/root_device_poll_test.cpp \
     $(ROOT)/drivers/storage/root_device.cpp support/test.hpp
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DMIKOS_TRIBE \
-		-DMIKOS_TRIBE_INTERACTIVE -DMIKOS_INTERACTIVE -DMIKOS_TRIBE_MULTICORE \
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DOSPLAY_TRIBE \
+		-DOSPLAY_TRIBE_INTERACTIVE -DOSPLAY_INTERACTIVE -DOSPLAY_TRIBE_MULTICORE \
 		-MMD -MP -MF $@.d drivers/root_device_poll_test.cpp \
 		$(ROOT)/drivers/storage/root_device.cpp $(LDFLAGS) -o $@
 
@@ -137,7 +137,7 @@ network-sanitize: $(BUILD)/network/tcp_stack_sanitized
 	$<
 
 $(BUILD)/network/tcp_stack_sanitized: network/tcp_stack_test.cpp network/harness.cpp \
-    network/harness.hpp $(ROOT)/network/stack.cpp $(wildcard $(ROOT)/include/mikos/net/*.hpp) Makefile | $(KERNEL_CXX_READY)
+    network/harness.hpp $(ROOT)/network/stack.cpp $(wildcard $(ROOT)/include/osplay/net/*.hpp) Makefile | $(KERNEL_CXX_READY)
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -O1 -g -fsanitize=address,undefined \
 	  -fno-sanitize-recover=all -fno-omit-frame-pointer \
@@ -148,7 +148,7 @@ network-linux-peer: $(BUILD)/network/linux_peer
 	python3 network/linux_peer.py --binary $<
 
 $(BUILD)/network/linux_peer: network/linux_peer.cpp $(ROOT)/network/stack.cpp \
-    $(wildcard $(ROOT)/include/mikos/net/*.hpp) Makefile | $(KERNEL_CXX_READY)
+    $(wildcard $(ROOT)/include/osplay/net/*.hpp) Makefile | $(KERNEL_CXX_READY)
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -O2 -g -pthread \
 	  network/linux_peer.cpp $(ROOT)/network/stack.cpp $(LDFLAGS) -o $@

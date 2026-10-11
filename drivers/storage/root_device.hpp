@@ -1,8 +1,8 @@
 #pragma once
 
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 
-namespace mikos::drivers::storage::root_device {
+namespace osplay::drivers::storage::root_device {
 
 inline constexpr u32 sector_size = 512;
 
@@ -20,4 +20,4 @@ class Device {
   [[nodiscard]] bool flush();
 };
 
-}  // namespace mikos::drivers::storage::root_device
+}  // namespace osplay::drivers::storage::root_device

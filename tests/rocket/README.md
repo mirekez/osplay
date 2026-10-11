@@ -1,14 +1,14 @@
-# mikOS on Rocket
+# OSplay on Rocket
 
 This profile runs the real Chipyard **RV32 Rocket RTL in Verilator**, not an ISA
-emulator. mikOS and its current Linux-compatible userspace ABI are RV32. This
+emulator. OSplay and its current Linux-compatible userspace ABI are RV32. This
 does not claim RV64 userspace support or a C++HDL simulator backend.
 
 ## Build and test
 
 ```bash
-cd ~/mikos
-export MIKOS_CXX=~/cpphdl/.conda/bin/clang++
+cd ~/osplay
+export OSPLAY_CXX=~/cpphdl/.conda/bin/clang++
 tests/rocket/prepare.sh
 tests/rocket/run_all.sh
 ```
@@ -20,12 +20,12 @@ this workspace. To select another checkout, update that symlink;
 
 Prerequisites: an initialized Chipyard checkout with `ethernet.patch` installed,
 its `.conda-env` (Verilator with timing support, host GCC, firtool and FESVR),
-the RV32 Linux toolchain described in the main README, and the existing mikOS
-kernel-C++ dependencies. `prepare.sh` installs only `MikosRocket.scala` and
-`MikosNetBridge.sv` into Chipyard, then builds the kernel/rootfs and simulator.
+the RV32 Linux toolchain described in the main README, and the existing OSplay
+kernel-C++ dependencies. `prepare.sh` installs only `OSplayRocket.scala` and
+`OSplayNetBridge.sv` into Chipyard, then builds the kernel/rootfs and simulator.
 It does not run Chipyard's destructive environment/bootstrap setup script.
 `--kernel-only` and `--sim-only` build either side separately. `ROCKET_JOBS`
-defaults to two to bound compilation memory. `MIKOS_READELF`, `CHIPYARD_ENV`,
+defaults to two to bound compilation memory. `OSPLAY_READELF`, `CHIPYARD_ENV`,
 and the existing `RISCV_HOME`/`RISCV_LINUX_PREFIX` variables override tools.
 
 The rootless `run_interactive_ping.sh` sends real Ethernet ARP and ICMP requests
@@ -48,9 +48,9 @@ sudo bash tests/network/start_tap.sh --background
 tests/rocket/rocket_interactive.sh --no-build
 ```
 
-The default bridge is shared with Tribe and Extreme: `tap-mikos`, socket
-`/tmp/mikos-tap.sock`. See [shared TAP setup](../network/TAP.md) for reusing
-an existing bridge via `MIKOS_TAP` and `MIKOS_TAP_SOCKET`. Only one simulator
+The default bridge is shared with Tribe and Extreme: `tap-osplay`, socket
+`/tmp/osplay-tap.sock`. See [shared TAP setup](../network/TAP.md) for reusing
+an existing bridge via `OSPLAY_TAP` and `OSPLAY_TAP_SOCKET`. Only one simulator
 may use a bridge at a time. The launcher checks the live socket, interface,
 host IP, route and permanent guest neighbor before building/starting Rocket.
 
@@ -63,12 +63,12 @@ needs sudo; run the simulator as your normal user.
 preserves the Tribe script entry-point name but builds Verilator.
 The guest is `192.168.76.2/24`, MAC `02:00:00:00:00:02`; the host TAP is
 `192.168.76.1/24`. Rocket opens a login shell that sources `/etc/profile` and
-starts Dropbear automatically. Wait for `MIKOS:TCP_LISTEN 22` before connecting
+starts Dropbear automatically. Wait for `OSPLAY:TCP_LISTEN 22` before connecting
 from the host; no console setup command is needed. Starting the background
 server entails a full BusyBox image restoration and can delay the first shell
 prompt by several minutes in RTL simulation. Type `exit` at the console to stop the guest. UART stdin is
 not redirected away.
-The early `MIKOS:NET_IP 10.0.2.15` banner precedes interactive interface
+The early `OSPLAY:NET_IP 10.0.2.15` banner precedes interactive interface
 configuration; use `192.168.76.2` for this profile.
 Use `--tap-socket PATH` or `ROCKET_ETH_SOCKET` to select a different bridge.
 `ROCKET_INTERACTIVE_TAP` selects a host TAP name. Only TAP provisioning needs
@@ -89,7 +89,7 @@ ROCKET_TEST_TAP=1 tests/rocket/run_all.sh
 
 - One RV32IMAC/F Rocket hart, 50 MHz buses, 256 MiB DRAM at `0x80000000`.
 - Kernel in M-mode; BusyBox/Dropbear in U-mode with PMP protection. No SBI or
-  virtual-memory translation is required by this mikOS port.
+  virtual-memory translation is required by this OSplay port.
 - Startup explicitly clears `medeleg`/`mideleg` and initializes counter access.
   Rocket's delegation registers are not reset to the emulator defaults; leaving
   them untouched can route the first userspace syscall to an undefined S-mode

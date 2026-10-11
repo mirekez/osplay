@@ -32,7 +32,7 @@ struct Bridge {
     if (fd < 0) fail("socket");
     sockaddr_un local{}, remote{};
     local.sun_family = remote.sun_family = AF_UNIX;
-    path = "/tmp/mikos-rocket-net-" + std::to_string(getpid()) + ".sock";
+    path = "/tmp/osplay-rocket-net-" + std::to_string(getpid()) + ".sock";
     if (path.size() >= sizeof(local.sun_path) || strlen(peer) >= sizeof(remote.sun_path)) {
       errno = ENAMETOOLONG; fail("socket path");
     }
@@ -75,7 +75,7 @@ struct Bridge {
   }
 } bridge;
 }
-extern "C" void mikos_net_tick(svBit reset, svBit tx_fire,
+extern "C" void osplay_net_tick(svBit reset, svBit tx_fire,
   unsigned long long tx_data, unsigned char tx_keep, svBit tx_last,
   svBit rx_fire, svBit* valid, unsigned long long* data,
   unsigned char* keep, svBit* last) {

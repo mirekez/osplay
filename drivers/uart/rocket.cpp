@@ -1,6 +1,6 @@
 #include <drivers/uart/uart.hpp>
 
-namespace mikos::drivers::uart {
+namespace osplay::drivers::uart {
 namespace {
 volatile u32* const uart = reinterpret_cast<volatile u32*>(0x10020000);
 bool pending = false;

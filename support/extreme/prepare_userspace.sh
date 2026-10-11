@@ -37,7 +37,7 @@ for source in "${sources[@]}"; do
     -I "$cxx/inplace_vector-63569fe8502c3504d7d81bb6d378f3ec21fb1e95/include" \
     -I "$cxx/include" -I "$root" -I "$root/include" -I "$cpu" -I "$cpu/compiler" \
     -I "$root/support/extreme/include" \
-    "${application_flags[@]}" -DMIKOS_EXTREME=1 -DMIKOS_EXTREME_USERSPACE=1 -DEC_BUS_BYTES=64 \
+    "${application_flags[@]}" -DOSPLAY_EXTREME=1 -DOSPLAY_EXTREME_USERSPACE=1 -DEC_BUS_BYTES=64 \
     -DEC_BANKS=2 -DEC_BANK_WORDS="$words" -c -emit-llvm "$root/$source" -o "$object"
   objects+=("$object")
 done
@@ -52,4 +52,4 @@ musl="$base/sources/musl-1.2.5"
 "$llvm/llvm-link" --only-needed "$build/main.bc" "$base/libc/lib/libc.a" -o "$build/linked.bc"
 "$compiler" "$build/linked.bc" "$base/runtime/softfloat.bc" --frontend armv7 --lto \
   --bits "$bits" --banks 2 --bank-words "$words" --reentrant \
-  -o "$build/mikos.ecx" --emit-ir "$build/mikos.ll"
+  -o "$build/osplay.ecx" --emit-ir "$build/osplay.ll"

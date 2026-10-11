@@ -39,14 +39,14 @@ unset BUILD HOST TARGET CC_FOR_BUILD CXX_FOR_BUILD CPP_FOR_BUILD CONFIG_SITE
 unset build_alias host_alias target_alias
 export CC=gcc CXX=g++ CFLAGS='-O2 -g0' CXXFLAGS='-O2 -g0'
 settings="$source_tree|$prefix|rv32ima|ilp32"
-if [[ -f "$build/.mikos-settings" ]] && [[ "$(cat "$build/.mikos-settings")" != "$settings" ]]; then
+if [[ -f "$build/.osplay-settings" ]] && [[ "$(cat "$build/.osplay-settings")" != "$settings" ]]; then
   echo "Toolchain build configuration changed; choose a new RISCV_TOOLCHAIN_BUILD directory." >&2
   exit 2
 fi
 (cd "$build" && "$source_tree/configure" --prefix="$prefix" \
   --with-arch=rv32ima --with-abi=ilp32 --with-languages=c,c++ \
   --enable-linux --disable-multilib --disable-gdb --disable-default-pie)
-printf '%s\n' "$settings" > "$build/.mikos-settings"
+printf '%s\n' "$settings" > "$build/.osplay-settings"
 
 # Complete and install libc first, then reclaim intermediate objects before
 # building the final compiler. Keep upstream stamps so retries are incremental.
@@ -68,4 +68,4 @@ if [[ -f "$build/build-gcc-linux-stage2/Makefile" &&
 fi
 make -C "$build" -j"$jobs" linux
 bash "$root/tests/busybox/check_linux_toolchain.sh" "$prefix/bin/riscv32-unknown-linux-gnu-"
-echo "Prepared mikOS userspace toolchain: $prefix/bin/riscv32-unknown-linux-gnu-gcc"
+echo "Prepared OSplay userspace toolchain: $prefix/bin/riscv32-unknown-linux-gnu-gcc"

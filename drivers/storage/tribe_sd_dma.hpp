@@ -1,8 +1,8 @@
 #pragma once
 
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 
-namespace mikos::drivers::tribe_sd::detail {
+namespace osplay::drivers::tribe_sd::detail {
 
 inline constexpr u32 control = 0x00;
 inline constexpr u32 status = 0x04;
@@ -81,4 +81,4 @@ template <typename Registers>
   return false;
 }
 
-}  // namespace mikos::drivers::tribe_sd::detail
+}  // namespace osplay::drivers::tribe_sd::detail

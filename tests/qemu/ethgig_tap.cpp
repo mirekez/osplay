@@ -34,8 +34,8 @@ volatile sig_atomic_t stop_requested = 0;
 void signal_handler(int) { stop_requested = 1; }
 
 struct Options {
-  std::string tap = "tap-mikos";
-  std::string socket = "/tmp/mikos-tap.sock";
+  std::string tap = "tap-osplay";
+  std::string socket = "/tmp/osplay-tap.sock";
   std::string peer;
   std::string address = "192.168.76.1";
   unsigned prefix = 24;
@@ -243,12 +243,12 @@ bool transient_error() { return errno == EAGAIN || errno == EWOULDBLOCK; }
 
 constexpr size_t bridge_queue_capacity = 64;
 
-bool mikos_frame_supported(const uint8_t* frame, size_t size) {
+bool osplay_frame_supported(const uint8_t* frame, size_t size) {
   return size >= 14 && frame[12] == 0x08 &&
          (frame[13] == 0x00 || frame[13] == 0x06);
 }
 
-bool mikos_frame_priority(const uint8_t* frame, size_t size) {
+bool osplay_frame_priority(const uint8_t* frame, size_t size) {
   if (size < 14) return false;
   if (frame[12] == 0x08 && frame[13] == 0x06) return true;
   if (frame[12] != 0x08 || frame[13] != 0x00 || size < 34) return false;
@@ -300,7 +300,7 @@ bool bridge_self_test() {
   bool ok = true;
 
   const std::string socket_path =
-      "/tmp/mikos-ethgig-self-test-" + std::to_string(getpid()) + ".sock";
+      "/tmp/osplay-ethgig-self-test-" + std::to_string(getpid()) + ".sock";
   const int socket_fd = open_socket(socket_path);
   struct stat socket_status {};
   if (socket_fd < 0 || stat(socket_path.c_str(), &socket_status) != 0 ||
@@ -331,13 +331,13 @@ bool bridge_self_test() {
   auto ipv6 = ack;
   ipv6[12] = 0x86;
   ipv6[13] = 0xdd;
-  if (!mikos_frame_supported(ack.data(), ack.size()) ||
-      !mikos_frame_supported(arp.data(), arp.size()) ||
-      mikos_frame_supported(ipv6.data(), ipv6.size()) ||
-      mikos_frame_priority(ack.data(), ack.size()) ||
-      !mikos_frame_priority(data.data(), data.size()) ||
-      !mikos_frame_priority(syn.data(), syn.size()) ||
-      !mikos_frame_priority(arp.data(), arp.size())) {
+  if (!osplay_frame_supported(ack.data(), ack.size()) ||
+      !osplay_frame_supported(arp.data(), arp.size()) ||
+      osplay_frame_supported(ipv6.data(), ipv6.size()) ||
+      osplay_frame_priority(ack.data(), ack.size()) ||
+      !osplay_frame_priority(data.data(), data.size()) ||
+      !osplay_frame_priority(syn.data(), syn.size()) ||
+      !osplay_frame_priority(arp.data(), arp.size())) {
     std::cerr << "bridge self-test: Ethernet/TCP classification failed\n";
     ok = false;
   }
@@ -407,7 +407,7 @@ int main(int argc, char** argv) {
     return 1;
   }
   FILE* pcap = nullptr;
-  if (const char* path = std::getenv("MIKOS_ETH_TAP_PCAP")) {
+  if (const char* path = std::getenv("OSPLAY_ETH_TAP_PCAP")) {
     pcap = std::fopen(path, "wb");
     if (pcap == nullptr) {
       std::cerr << "open packet capture " << path << ": "
@@ -493,7 +493,7 @@ int main(int argc, char** argv) {
         std::vector<uint8_t> queued(frame, frame + frame_size);
         static_cast<void>(enqueue_frame(
             pending_to_host, std::move(queued),
-            mikos_frame_priority(frame, frame_size), guest_to_host_dropped));
+            osplay_frame_priority(frame, frame_size), guest_to_host_dropped));
       }
     }
 
@@ -525,7 +525,7 @@ int main(int argc, char** argv) {
         }
         const size_t frame_size = static_cast<size_t>(received);
         write_pcap_frame(pcap, frame, frame_size);
-        if (!mikos_frame_supported(frame, frame_size)) continue;
+        if (!osplay_frame_supported(frame, frame_size)) continue;
         if (!have_peer) continue;
         size_t message_size = frame_size;
         if (!qemu_mode) {
@@ -538,7 +538,7 @@ int main(int argc, char** argv) {
                                     message.begin() + message_size);
         static_cast<void>(enqueue_frame(
             pending_to_guest, std::move(queued),
-            mikos_frame_priority(frame, frame_size), host_to_guest_dropped));
+            osplay_frame_priority(frame, frame_size), host_to_guest_dropped));
       }
     }
 

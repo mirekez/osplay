@@ -1,4 +1,4 @@
-# Mikos Development Plan
+# OSplay Development Plan
 
 This plan turns [REQUIREMENTS.md](REQUIREMENTS.md) into small, testable
 milestones. Work does not advance past a gate by replacing failed tests with
@@ -24,7 +24,7 @@ brought up in successive gates.
 Current implementation status: the RV32 POC boots without address translation
 or enabled device interrupts, configures PMP, uses one M-mode scheduling timer
 to preempt an uncooperative U-mode loop, and passes
-`busybox echo MIKOS_BUSYBOX_OK`. See `doc/poc-rv32.md` and
+`busybox echo OSPLAY_BUSYBOX_OK`. See `doc/poc-rv32.md` and
 `doc/adr/0001-scheduling-interrupt.md`.
 
 The networking slice passes deterministic host/guest ARP and ICMP exchanges
@@ -237,7 +237,7 @@ Exit gate:
 Deliverables:
 
 - reproducible Linux UAPI importer/generator;
-- a configurable `--linux-source`/`MIKOS_LINUX_SOURCE` regeneration path with
+- a configurable `--linux-source`/`OSPLAY_LINUX_SOURCE` regeneration path with
   no dependency on a developer-specific absolute path;
 - a checked-in source-input manifest containing revision, relative path,
   SHA-256, SPDX identifier, and ABI use;

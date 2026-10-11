@@ -2,8 +2,8 @@
 
 namespace {
 
-using namespace mikos;
-using namespace mikos::drivers::fs::ext4;
+using namespace osplay;
+using namespace osplay::drivers::fs::ext4;
 
 struct Device {
   [[nodiscard]] u64 size() const { return 0; }

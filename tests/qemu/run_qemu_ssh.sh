@@ -3,18 +3,18 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 
-if [[ "${MIKOS_NETNS_ENTERED:-0}" != 1 ]]; then
-  exec unshare -Urn env MIKOS_NETNS_ENTERED=1 "$0" "$@"
+if [[ "${OSPLAY_NETNS_ENTERED:-0}" != 1 ]]; then
+  exec unshare -Urn env OSPLAY_NETNS_ENTERED=1 "$0" "$@"
 fi
 
 qemu="$root/build/qemu/qemu-system-riscv32"
 kernel="$root/build/linux-qemu-out/arch/riscv/boot/Image"
-initramfs="$root/build/mikos-ssh-initramfs.cpio"
+initramfs="$root/build/osplay-ssh-initramfs.cpio"
 bridge="$root/build/tests/qemu/ethgig_tap"
-identity="$root/build/mikos_ssh_key"
+identity="$root/build/osplay_ssh_key"
 top_log="$root/build/qemu-ssh-top.log"
 qemu_log="$root/build/qemu-ssh.log"
-runtime="$(mktemp -d /tmp/mikos-ssh.XXXXXX)"
+runtime="$(mktemp -d /tmp/osplay-ssh.XXXXXX)"
 bridge_socket="$runtime/bridge.sock"
 qemu_socket="$runtime/qemu.sock"
 
@@ -38,7 +38,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$bridge" --tap tap-mikos --address 192.168.76.1/24 \
+"$bridge" --tap tap-osplay --address 192.168.76.1/24 \
   --socket "$bridge_socket" --peer "$qemu_socket" \
   >"$root/build/qemu-ssh-bridge.log" 2>&1 &
 bridge_pid=$!

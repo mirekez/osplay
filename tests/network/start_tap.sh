@@ -2,7 +2,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 tap="$(python3 "$root/tests/network/tap.py" --select-tap)"
-socket="${MIKOS_TAP_SOCKET:-/tmp/mikos-tap.sock}"
+socket="${OSPLAY_TAP_SOCKET:-/tmp/osplay-tap.sock}"
 bridge="$root/build/tests/network/ethgig_tap"
 background=0
 if [[ "${1:-}" == --background ]]; then background=1; shift; fi
@@ -17,7 +17,7 @@ if [[ -e "$socket" || -L "$socket" ]]; then
   existing=1
 fi
 if ((!existing)) && ip -j link show | python3 -c 'import json,sys; sys.exit(not any(l["ifname"] == sys.argv[1] and "LOWER_UP" in l["flags"] for l in json.load(sys.stdin)))' "$tap"; then
-  echo "TAP $tap already has an attached process; select its socket with MIKOS_TAP_SOCKET or stop that bridge first." >&2
+  echo "TAP $tap already has an attached process; select its socket with OSPLAY_TAP_SOCKET or stop that bridge first." >&2
   exit 1
 fi
 if ! ip link show dev "$tap" >/dev/null 2>&1; then
@@ -27,7 +27,7 @@ fi
 ip -j -d link show dev "$tap" | python3 -c 'import json,sys; l=json.load(sys.stdin)[0].get("linkinfo", {}); sys.exit(not (l.get("info_kind") == "tun" and l.get("info_data", {}).get("type") == "tap"))' || {
   echo "Not a TAP interface: $tap" >&2; exit 1;
 }
-ip -j address show | python3 -c 'import json,sys; tap=sys.argv[1]; conflicts=[l["ifname"] for l in json.load(sys.stdin) if l["ifname"] != tap and any(a.get("local") == "192.168.76.1" for a in l["addr_info"])]; print("Host IP 192.168.76.1 already belongs to " + ", ".join(conflicts) + "; select that TAP with MIKOS_TAP and its socket with MIKOS_TAP_SOCKET.", file=sys.stderr) if conflicts else None; sys.exit(bool(conflicts))' "$tap"
+ip -j address show | python3 -c 'import json,sys; tap=sys.argv[1]; conflicts=[l["ifname"] for l in json.load(sys.stdin) if l["ifname"] != tap and any(a.get("local") == "192.168.76.1" for a in l["addr_info"])]; print("Host IP 192.168.76.1 already belongs to " + ", ".join(conflicts) + "; select that TAP with OSPLAY_TAP and its socket with OSPLAY_TAP_SOCKET.", file=sys.stderr) if conflicts else None; sys.exit(bool(conflicts))' "$tap"
 ip address replace 192.168.76.1/24 dev "$tap"
 ip link set dev "$tap" up
 ip neigh replace 192.168.76.2 lladdr 02:00:00:00:00:02 nud permanent dev "$tap"

@@ -1,6 +1,6 @@
 #include <drivers/uart/uart.hpp>
 
-namespace mikos::drivers::uart {
+namespace osplay::drivers::uart {
 namespace {
 
 inline constexpr u32 base = 0x82000000;
@@ -29,4 +29,4 @@ bool receive(u8& value) {
   return true;
 }
 
-}  // namespace mikos::drivers::uart
+}  // namespace osplay::drivers::uart

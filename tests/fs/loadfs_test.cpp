@@ -5,8 +5,8 @@
 
 namespace {
 
-using namespace mikos;
-using namespace mikos::drivers::fs;
+using namespace osplay;
+using namespace osplay::drivers::fs;
 
 [[nodiscard]] u32 prbs_step(u32& state) {
   state ^= state << 13;
@@ -23,34 +23,34 @@ void fill_prbs(u8* output, u32 size, u32 seed) {
 }
 
 template <MutableFilesystem Filesystem>
-void verify_file(mikos::test::Suite& suite, Filesystem& filesystem,
+void verify_file(osplay::test::Suite& suite, Filesystem& filesystem,
                  const char* path, const u8* expected, u32 expected_size) {
   const auto size = filesystem.file_size(path);
-  MIKOS_CHECK(suite, size);
+  OSPLAY_CHECK(suite, size);
   if (!size) {
     return;
   }
-  MIKOS_CHECK(suite, (*size) == expected_size);
+  OSPLAY_CHECK(suite, (*size) == expected_size);
   u8 window[257]{};
   for (u32 offset = 0; offset < expected_size; offset += sizeof(window)) {
     const u32 remaining = expected_size - offset;
     const u32 count =
         remaining < sizeof(window) ? remaining : sizeof(window);
     const auto read = filesystem.read(path, offset, window, count);
-    MIKOS_CHECK(suite, read);
+    OSPLAY_CHECK(suite, read);
     if (!read) {
       return;
     }
-    MIKOS_CHECK(suite, (*read) == count);
+    OSPLAY_CHECK(suite, (*read) == count);
     for (u32 index = 0; index < count; ++index) {
-      MIKOS_CHECK(suite, window[index] == expected[offset + index]);
+      OSPLAY_CHECK(suite, window[index] == expected[offset + index]);
     }
   }
-  MIKOS_CHECK(suite, filesystem.consistent());
+  OSPLAY_CHECK(suite, filesystem.consistent());
 }
 
 template <MutableFilesystem Filesystem>
-void run_load(mikos::test::Suite& suite, Filesystem& filesystem) {
+void run_load(osplay::test::Suite& suite, Filesystem& filesystem) {
   constexpr u32 first_size = 8191;
   constexpr u32 second_size = 12289;
   static u8 first[first_size];
@@ -65,47 +65,47 @@ void run_load(mikos::test::Suite& suite, Filesystem& filesystem) {
     concatenated[first_size + index] = second[index];
   }
 
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               filesystem.create("/alpha.prbs", first, sizeof(first)) ==
                   Error::none);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               filesystem.create("/beta.prbs", second, sizeof(second)) ==
                   Error::none);
-  MIKOS_CHECK(suite, filesystem.consistent());
+  OSPLAY_CHECK(suite, filesystem.consistent());
   verify_file(suite, filesystem, "/alpha.prbs", first, sizeof(first));
   verify_file(suite, filesystem, "/beta.prbs", second, sizeof(second));
 
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               filesystem.move("/alpha.prbs", "/moved.prbs") ==
                   Error::none);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               filesystem.file_size("/alpha.prbs").error() ==
                   Error::not_found);
   verify_file(suite, filesystem, "/moved.prbs", first, sizeof(first));
 
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               filesystem.concatenate("/moved.prbs", "/beta.prbs") ==
                   Error::none);
   verify_file(suite, filesystem, "/moved.prbs", concatenated,
               sizeof(concatenated));
   verify_file(suite, filesystem, "/beta.prbs", second, sizeof(second));
 
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               filesystem.remove("/beta.prbs") == Error::none);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               filesystem.file_size("/beta.prbs").error() ==
                   Error::not_found);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               filesystem.remove("/beta.prbs") == Error::not_found);
   verify_file(suite, filesystem, "/moved.prbs", concatenated,
               sizeof(concatenated));
-  MIKOS_CHECK(suite, filesystem.consistent());
+  OSPLAY_CHECK(suite, filesystem.consistent());
 }
 
 }  // namespace
 
 int main() {
-  mikos::test::Suite suite{"fs/loadfs"};
+  osplay::test::Suite suite{"fs/loadfs"};
   using Ext4Contract =
       ext4::Volume<ext4::test::Device>;
   using Fat32Contract =
@@ -115,32 +115,32 @@ int main() {
 
   ext4::test::Image ext4_image;
   auto ext4_mount = Ext4Contract::mount(ext4_image.device);
-  MIKOS_CHECK(suite, ext4_mount);
+  OSPLAY_CHECK(suite, ext4_mount);
   run_load(suite, (*ext4_mount));
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               ext4_mount->create("/Case", nullptr, 0) == Error::none);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               ext4_mount->create("/case", nullptr, 0) == Error::none);
   auto ext4_remount = Ext4Contract::mount(ext4_image.device);
-  MIKOS_CHECK(suite, ext4_remount);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite, ext4_remount);
+  OSPLAY_CHECK(suite,
               ext4_remount->file_size("/moved.prbs").value() == 20480);
-  MIKOS_CHECK(suite, ext4_remount->consistent());
+  OSPLAY_CHECK(suite, ext4_remount->consistent());
 
   fat32::test::Image fat32_image;
   fat32_image.end_directory(2, 0);
   auto fat32_mount = Fat32Contract::mount(fat32_image.device);
-  MIKOS_CHECK(suite, fat32_mount);
+  OSPLAY_CHECK(suite, fat32_mount);
   run_load(suite, (*fat32_mount));
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               fat32_mount->create("/Case", nullptr, 0) == Error::none);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               fat32_mount->create("/case", nullptr, 0) ==
                   Error::already_exists);
   auto fat32_remount = Fat32Contract::mount(fat32_image.device);
-  MIKOS_CHECK(suite, fat32_remount);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite, fat32_remount);
+  OSPLAY_CHECK(suite,
               fat32_remount->file_size("/moved.prbs").value() == 20480);
-  MIKOS_CHECK(suite, fat32_remount->consistent());
+  OSPLAY_CHECK(suite, fat32_remount->consistent());
   return suite.finish();
 }

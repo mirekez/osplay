@@ -1,4 +1,4 @@
-ROCKET_FLAGS = $(RV_FLAGS) -DMIKOS_ROCKET -DMIKOS_INTERACTIVE
+ROCKET_FLAGS = $(RV_FLAGS) -DOSPLAY_ROCKET -DOSPLAY_INTERACTIVE
 ROCKET_SOURCES = $(filter-out drivers/uart/ns16550a.cpp drivers/net/virtio_mmio.cpp \
   drivers/storage/virtio_block.cpp drivers/storage/root_device.cpp,$(KERNEL_SOURCES)) \
   drivers/uart/rocket.cpp drivers/net/rocket.cpp drivers/storage/rocket.cpp \
@@ -20,11 +20,11 @@ $(BUILD)/rocket/rootfs.o: $(ROOTFS_IMAGE)
 	@mkdir -p $(@D)
 	$(OBJCOPY) -I binary -O elf32-littleriscv -B riscv \
 	  --rename-section .data=.rocket_disk,alloc,load,data,contents $< $@
-$(BUILD)/mikos-rocket-rv32.elf: $(ROCKET_OBJECTS) kernel/arch/rocket/linker.ld kernel/arch/riscv32/linker.ld
+$(BUILD)/osplay-rocket-rv32.elf: $(ROCKET_OBJECTS) kernel/arch/rocket/linker.ld kernel/arch/riscv32/linker.ld
 	$(LD) -m elf32lriscv -nostdlib --gc-sections -T kernel/arch/rocket/linker.ld \
-	  -Map $(BUILD)/mikos-rocket-rv32.map -o $@ $(ROCKET_OBJECTS)
+	  -Map $(BUILD)/osplay-rocket-rv32.map -o $@ $(ROCKET_OBJECTS)
 .PHONY: rocket-kernel rocket-prepare rocket-test rocket-interactive rocket-all-tests
-rocket-kernel: $(BUILD)/mikos-rocket-rv32.elf
+rocket-kernel: $(BUILD)/osplay-rocket-rv32.elf
 rocket-prepare:
 	bash tests/rocket/prepare.sh
 rocket-interactive:

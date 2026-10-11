@@ -1,7 +1,7 @@
 #include <drivers/net/net.hpp>
 #include <kernel/arch/extreme/platform.hpp>
 
-namespace mikos::drivers::net {
+namespace osplay::drivers::net {
 namespace {
 alignas(64) u8 packet[::extreme::devices::packet_bytes];
 }
@@ -51,4 +51,4 @@ bool transmit(const u8 *frame, u32 size) {
   }
   return true;
 }
-} // namespace mikos::drivers::net
+} // namespace osplay::drivers::net

@@ -1,7 +1,7 @@
-#include <mikos/container/standard.hpp>
-#include <mikos/memory/boot_array.hpp>
+#include <osplay/container/standard.hpp>
+#include <osplay/memory/boot_array.hpp>
 
-namespace mikos {
+namespace osplay {
 // Runs in the actual freestanding kernel too: every required container is
 // instantiated and exercised, so --gc-sections cannot hide missing support.
 bool kernel_cxx_smoke() {
@@ -42,4 +42,4 @@ bool kernel_cxx_smoke() {
   }
   return arena.used() == 0 && arena.allocations() == 0;
 }
-}  // namespace mikos
+}  // namespace osplay

@@ -2,13 +2,13 @@
 
 Tribe tests now require `export CPPHDL_HOME="$HOME/cpphdl"`. Fixes are maintained
 in that checkout, including its working-tree changes, rather than applied by
-mikOS at build time. The old pinned clone and `tests/tribe/patches` are retired.
+OSplay at build time. The old pinned clone and `tests/tribe/patches` are retired.
 A checkout used elsewhere must contain the fixes below. The original network
 fixes are in commit `3e739c3` (subsequently merged into `f1a1f7f`).
 
 ## BusyBox boot failure after mounting ext4
 
-`MIKOS:EXT4_ROOT_OK` followed by `MIKOS:BAD_ELF` can result from Tribe losing
+`OSPLAY:EXT4_ROOT_OK` followed by `OSPLAY:BAD_ELF` can result from Tribe losing
 a completed load value while a younger multiply or divide holds the pipeline.
 Writeback consumed the load's response-valid token, then exposed zero while
 the same instruction still occupied the memory stage. Repeated writeback
@@ -24,8 +24,8 @@ dependent operands, and repeated loads of different data. It is also part of
 `network_regression.sh`.
 
 Update the cpphdl checkout and rerun `tests/tribe/tribe_interactive.sh --multicore`
-from mikOS to rebuild the simulator. mikOS now logs the image path and filesystem
-error when lookup fails, before the final `MIKOS:BAD_ELF` marker.
+from OSplay to rebuild the simulator. OSplay now logs the image path and filesystem
+error when lookup fails, before the final `OSPLAY:BAD_ELF` marker.
 
 ## Network failure causes
 
@@ -50,13 +50,13 @@ through their end marker. Normal traffic can resume after the guest drains RX.
 The 512-byte regression also exposed early test termination: the UART success
 marker can precede transmission of buffered Ethernet bytes. The harness now
 waits for the MAC, PCS, PHY, and host TX queue to drain before ending a
-successful socket-backed test. The mikOS runner also allows the peer to publish
+successful socket-backed test. The OSplay runner also allows the peer to publish
 its verdict after receiving the final datagram. The peer drains queued replies
 before retrying: a valid echo may follow an ARP reply in the receive queue after
 the simulator socket has closed. `make tribe-peer-test` checks both valid and
 corrupt queued replies and is included in `make test`.
 
-The rootless mikOS peer checks ARP and an ICMP reply with a 512-byte payload,
+The rootless OSplay peer checks ARP and an ICMP reply with a 512-byte payload,
 including addresses, echo identifiers, lengths, checksums, and payload bytes.
 This also exercises reception beyond the old 256-byte MAC configuration.
 
@@ -69,7 +69,7 @@ This also exercises reception beyond the old 256-byte MAC configuration.
 | `native-port-cache-fast-path` | Already present upstream. |
 | `polling-dma-invalidate` | Replaced with completion-event invalidation; pulsing a sticky IRQ still repeatedly invalidates the cache. |
 | `preserve-host-control-frames` | Removed simulated-time ARP/ICMP suppression. |
-| `tcp-rx-burst-backlog`, `reliable-eth-queues` | Migrated bounded queues, preservation of an in-flight frame, priority protection, and TX dequeue only after successful socket send. The mikOS-specific IPv4/ARP filter was omitted. |
+| `tcp-rx-burst-backlog`, `reliable-eth-queues` | Migrated bounded queues, preservation of an in-flight frame, priority protection, and TX dequeue only after successful socket send. The OSplay-specific IPv4/ARP filter was omitted. |
 | `ssh-kex-rx-burst-capacity` | Migrated the 16-frame queue capacity. |
 | `coalesce-tcp-ingress` | Migrated preservation of earlier queued payload. Omitted semantic TCP hashing: distinct packets must not be treated as identical merely because their headers match. |
 | `coalesce-completed-tcp-ingress` | Omitted: suppressing retries after RGMII transmission can suppress recovery when the guest never received the frame. |

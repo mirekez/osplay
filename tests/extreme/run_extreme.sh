@@ -22,7 +22,7 @@ source "$root/tests/extreme/paths.sh"
 args=()
 ((multicore)) && args+=(--multicore)
 if ((prepare)); then bash "$root/tests/extreme/prepare_cpphdl.sh" "${args[@]}"; fi
-runtime="$(mktemp -d /tmp/mikos-extreme.XXXXXX)"
+runtime="$(mktemp -d /tmp/osplay-extreme.XXXXXX)"
 peer_pid=""
 cleanup() {
   if [[ -n "$peer_pid" ]]; then kill "$peer_pid" 2>/dev/null || true; wait "$peer_pid" 2>/dev/null || true; fi
@@ -31,7 +31,7 @@ cleanup() {
 trap cleanup EXIT
 log="$build/$mode-$flow.log"
 peer_log="$build/$mode-$flow-peer.log"
-args=(--image "$build/mikos-$mode.ecx" --cycles "${EXTREME_CYCLES:-20000000}")
+args=(--image "$build/osplay-$mode.ecx" --cycles "${EXTREME_CYCLES:-20000000}")
 ((multicore)) && args+=(--require-task)
 ((stalls)) && args+=(--stalls)
 if [[ "$mode" == kernel ]]; then
@@ -60,13 +60,13 @@ if [[ -n "$peer_pid" ]]; then
   wait "$peer_pid" || { cat "$peer_log"; exit 1; }
   peer_pid=""
 fi
-for marker in MIKOS:BOOT MIKOS:EXTREME_CXX_OK MIKOS:FLAT_DEVICE_IRQ_OFF 'MIKOS:EXIT 0'; do
+for marker in OSPLAY:BOOT OSPLAY:EXTREME_CXX_OK OSPLAY:FLAT_DEVICE_IRQ_OFF 'OSPLAY:EXIT 0'; do
   grep -Fxq "$marker" "$log" || { cat "$log"; echo "missing marker: $marker"; exit 1; }
 done
 if [[ "$mode" == kernel ]]; then
-  grep -Fxq 'MIKOS:KERNEL_CXX_OK' "$log"
-  grep -Fxq 'MIKOS:ARP_REPLY' "$log"
-  grep -Fxq 'MIKOS:ICMP_ECHO_REPLY' "$log"
+  grep -Fxq 'OSPLAY:KERNEL_CXX_OK' "$log"
+  grep -Fxq 'OSPLAY:ARP_REPLY' "$log"
+  grep -Fxq 'OSPLAY:ICMP_ECHO_REPLY' "$log"
 fi
 cat "$log"
-echo "PASS: Extreme mikOS $mode flow=$flow cores=$cores"
+echo "PASS: Extreme OSplay $mode flow=$flow cores=$cores"

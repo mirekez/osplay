@@ -20,7 +20,7 @@ def main():
     args = parser.parse_args()
     if not pathlib.Path(args.bridge).is_socket():
         parser.error('an existing Tribe TAP bridge is required (see tests/tribe/README.md)')
-    with tempfile.TemporaryDirectory(prefix='mikos-linux-tcp-') as runtime:
+    with tempfile.TemporaryDirectory(prefix='osplay-linux-tcp-') as runtime:
         server = subprocess.Popen([str(args.binary), args.bridge, runtime + '/peer.sock'],
                                   stdout=subprocess.PIPE, text=True)
         try:

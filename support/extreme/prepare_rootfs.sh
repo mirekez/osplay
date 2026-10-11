@@ -19,7 +19,7 @@ for name in passwd group profile shells; do
 done
 cp "$root/tests/busybox/rootfs/root/.ssh/authorized_keys" "$stage/root/.ssh/authorized_keys"
 printf '\n' >> "$stage/root/.ssh/authorized_keys"
-cat "$root/build/mikos_ssh_key.pub" >> "$stage/root/.ssh/authorized_keys"
+cat "$root/build/osplay_ssh_key.pub" >> "$stage/root/.ssh/authorized_keys"
 chmod 600 "$stage/root/.ssh/authorized_keys"
 base64 -d "$root/tests/busybox/rootfs/etc/dropbear/dropbear_ed25519_host_key.b64" > "$stage/etc/dropbear/dropbear_ed25519_host_key"
 chmod 600 "$stage/etc/dropbear/dropbear_ed25519_host_key"
@@ -29,9 +29,9 @@ else
   cat > "$stage/etc/init.d/rcS" <<'INIT'
 #!/bin/sh
 set -e
-printf 'MIKOS:BUSYBOX_PRINTF %u %x\n' 42 305419896
+printf 'OSPLAY:BUSYBOX_PRINTF %u %x\n' 42 305419896
 test "$(echo extreme)" = extreme
-printf 'MIKOS:BUSYBOX_OK\n'
+printf 'OSPLAY:BUSYBOX_OK\n'
 exit 0
 INIT
 fi

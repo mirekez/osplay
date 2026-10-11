@@ -28,7 +28,7 @@ bucket capacity but preserves the set's elements. This is an explicit, bounded
 heap exception to REQUIREMENTS section 11, not permission for unrestricted heap
 use or unwinding.
 
-`inplace_vector` is exposed through `mikos::inplace_vector`, using the Beman
+`inplace_vector` is exposed through `osplay::inplace_vector`, using the Beman
 implementation pinned by commit until libc++ implements `std::inplace_vector`.
 No replacement declarations are injected into `std`. Prefer `try_push_back` /
 `try_emplace_back` for full-capacity recovery.

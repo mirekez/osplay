@@ -1,12 +1,12 @@
 #pragma once
 
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 #include <algorithm>
 #include <expected>
 #include <span>
 #include <string_view>
 
-namespace mikos::drivers::fs {
+namespace osplay::drivers::fs {
 
 enum class Error : u8 {
   none,
@@ -139,4 +139,4 @@ inline void zero_bytes(u8* output, u32 size) {
   std::ranges::fill(std::span{output, size}, u8{});
 }
 
-}  // namespace mikos::drivers::fs
+}  // namespace osplay::drivers::fs

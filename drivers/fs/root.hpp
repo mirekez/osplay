@@ -2,7 +2,7 @@
 
 #include <drivers/fs/ext4/ext4.hpp>
 
-namespace mikos::drivers::fs::root {
+namespace osplay::drivers::fs::root {
 
 using Node = ext4::Node;
 using Entry = ext4::Entry;
@@ -24,4 +24,4 @@ using DirectoryVisitor = bool (*)(void* context, const Entry& entry);
 [[nodiscard]] Error move(const char* source, const char* destination);
 [[nodiscard]] Error sync();
 
-}  // namespace mikos::drivers::fs::root
+}  // namespace osplay::drivers::fs::root

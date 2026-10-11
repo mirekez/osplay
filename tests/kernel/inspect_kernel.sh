@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-elf="${1:-$root/build/mikos-rv32.elf}"
+elf="${1:-$root/build/osplay-rv32.elf}"
 sections="${elf%.elf}.sections.txt"
 symbols="${elf%.elf}.undefined.txt"
 

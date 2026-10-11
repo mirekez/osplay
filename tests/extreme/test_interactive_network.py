@@ -30,8 +30,8 @@ def main():
         # Spaces exercise the shell quoting in the copyable setup commands.
         media = str(directory / "ethernet socket")
         os.environ.update(
-            MIKOS_TAP="extreme-check",
-            MIKOS_TAP_SOCKET=media,
+            OSPLAY_TAP="extreme-check",
+            OSPLAY_TAP_SOCKET=media,
             # Stale platform settings must not divert the universal link.
             EXTREME_INTERACTIVE_TAP="unused-old-tap",
             EXTREME_ETH_TAP_SOCKET="/tmp/unused-old-extreme.sock",
@@ -123,15 +123,15 @@ def main():
                     if line.strip().startswith("sudo env ")
                 )
                 assert (
-                    f"MIKOS_TAP_SOCKET={directory / 'missing socket'}"
+                    f"OSPLAY_TAP_SOCKET={directory / 'missing socket'}"
                     in shlex.split(setup)
                 )
-                assert "MIKOS_TAP=extreme-check" in shlex.split(setup)
+                assert "OSPLAY_TAP=extreme-check" in shlex.split(setup)
                 assert str(ROOT / "tests/network/start_tap.sh") in shlex.split(setup)
                 assert "EXTREME_ETH_TAP_SOCKET" not in missing.stderr
                 assert "tap.py extreme" in missing.stderr
                 shared_missing = dict(
-                    os.environ, MIKOS_TAP_SOCKET=str(directory / "shared missing")
+                    os.environ, OSPLAY_TAP_SOCKET=str(directory / "shared missing")
                 )
                 for profile in ("ping", "tcp", "ssh", "ssh-shell"):
                     result = subprocess.run(
@@ -179,7 +179,7 @@ def main():
                     deadline = time.monotonic() + 1800
                     while True:
                         output = log_path.read_text(errors="replace")
-                        if "/ # " in output and "MIKOS:TCP_LISTEN 22" in output:
+                        if "/ # " in output and "OSPLAY:TCP_LISTEN 22" in output:
                             break
                         if console.poll() is not None or time.monotonic() > deadline:
                             raise RuntimeError(
@@ -188,11 +188,11 @@ def main():
                         time.sleep(0.2)
                     assert "-p 22 root@192.168.76.2" in output
                     assert (
-                        "build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear"
+                        "build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear"
                         in output
                     )
                     assert "test_key.dropbear" not in output
-                    assert f"MIKOS:NET_IP {GUEST}" in output
+                    assert f"OSPLAY:NET_IP {GUEST}" in output
                     if not args.idle:
                         ping = next(
                             line.strip()

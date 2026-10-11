@@ -45,14 +45,14 @@ stage=(python3 "$root/support/extreme/stage.py")
   --input "$root/support/extreme/prepare_dropbear.sh" --input "$root/support/extreme/cc.py" \
   --input "$root/support/extreme/configure-cc.py" --input "$root/support/extreme/ld.py" \
   --input "$root/tests/busybox/config/dropbear_localoptions.h" --input "$base/libc.stamp" \
-  --input "$root/tests/busybox/patches/dropbear-mikos.patch" \
+  --input "$root/tests/busybox/patches/dropbear-osplay.patch" \
   -- bash "$root/support/extreme/prepare_dropbear.sh"
 "${stage[@]}" --stamp "$base/host.stamp" --artifact "$base/host/dbclient" \
   --input "$root/support/extreme/prepare_host.sh" --input "$root/tests/qemu/ethgig_tap.cpp" \
   --input "$root/tests/busybox/config/dropbear_localoptions.h" \
-  --input "$root/tests/busybox/patches/dropbear-mikos.patch" \
+  --input "$root/tests/busybox/patches/dropbear-osplay.patch" \
   -- bash "$root/support/extreme/prepare_host.sh"
-"${stage[@]}" --stamp "$base/userspace.stamp" --artifact "$base/userspace/mikos.ecx" \
+"${stage[@]}" --stamp "$base/userspace.stamp" --artifact "$base/userspace/osplay.ecx" \
   --input "$root/support/extreme" --input "$root/kernel" --input "$root/include" \
   --input "$root/drivers" --input "$root/network" --input "$cpu/compiler" \
   --input "$build/cpu/compiler/extreme-codegen" --input "$build/cpu/bin/extreme-cxx" \

@@ -1,9 +1,9 @@
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 extern "C" {
-alignas(64) __attribute__((section(".tohost"))) volatile mikos::u64 tohost;
-alignas(64) __attribute__((section(".tohost"))) volatile mikos::u64 fromhost;
+alignas(64) __attribute__((section(".tohost"))) volatile osplay::u64 tohost;
+alignas(64) __attribute__((section(".tohost"))) volatile osplay::u64 fromhost;
 }
-namespace mikos {
+namespace osplay {
 void rocket_shutdown(u32 code) {
   auto* uart = reinterpret_cast<volatile u32*>(0x10020000);
   uart[2] = 1 | (1 << 16); // TX watermark one: wait for FIFO empty.

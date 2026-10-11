@@ -1,11 +1,11 @@
 # RV32 stress-ng integration
 
-Mikos stores BusyBox and a static RV32 stress-ng in one ext4 root image. The
+OSplay stores BusyBox and a static RV32 stress-ng in one ext4 root image. The
 kernel mounts that image read-write and runs `/bin/busybox` and
 `/bin/stress-ng` sequentially in the single flat user region:
 
 ```text
-busybox echo MIKOS_BUSYBOX_OK
+busybox echo OSPLAY_BUSYBOX_OK
 stress-ng --cpu 1 --cpu-method loop --cpu-ops 4 --verify --metrics-brief
 ```
 
@@ -24,11 +24,11 @@ commit. The integration was developed against commit
 
 `make stress-ng` delegates to the BusyBox test Makefile, archives that checkout
 into `build/tests/busybox/stress-ng-source`, applies
-`tests/busybox/patches/stress-ng-mikos.patch` to the build copy, and creates a
+`tests/busybox/patches/stress-ng-osplay.patch` to the build copy, and creates a
 stripped, static RV32 Linux ELF linked at `0x81000000`. The upstream checkout
 remains unmodified. `make kernel` requests
 `build/tests/busybox/rootfs.ext4`; neither executable is converted to a linker
-object or embedded in `mikos-rv32.elf`.
+object or embedded in `osplay-rv32.elf`.
 
 QEMU reads the image through a polling modern virtio-blk driver and Tribe reads
 the same sectors through its SD DMA controller. The interactive shell resolves
@@ -54,13 +54,13 @@ concurrent runnable process scheduler, handler-frame signal delivery, or every
 Linux filesystem feature. Its root
 filesystem is a generic writable ext4 mount for the deliberately journal-free,
 metadata-checksum-free test format. Normal stress-ng launches every worker with
-`fork`, so the build-only `STRESS_MIKOS` path runs the one requested worker
+`fork`, so the build-only `STRESS_OSPLAY` path runs the one requested worker
 in-process while retaining upstream option parsing, setup, CPU stressor,
 verification, metrics, status accounting, and cleanup. It is enabled only for
-the Mikos build and does not alter stress-ng's normal launcher.
+the OSplay build and does not alter stress-ng's normal launcher.
 
 This is a real CPU-stressor compatibility test, not a claim that the full
 stress-ng suite works. Stressors requiring concurrent processes, threads,
 unimplemented filesystem/device behavior, or handler-frame signal delivery
 remain outside this POC's supported behavior. Unsupported discovery calls
-return Linux errors and remain visible as `MIKOS:ENOSYS` trace records.
+return Linux errors and remain visible as `OSPLAY:ENOSYS` trace records.

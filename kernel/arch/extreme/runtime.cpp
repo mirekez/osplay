@@ -1,6 +1,6 @@
 #include <kernel/arch/extreme/platform.hpp>
 
-namespace mikos {
+namespace osplay {
 void write_text(const char *text) { extreme_platform::write_text(text); }
 
 // Terminal path for the shared C++ runtime's allocation/assertion failures.
@@ -8,4 +8,4 @@ void write_text(const char *text) { extreme_platform::write_text(text); }
   extreme_platform::write(::extreme::devices::exit_code, code);
   __builtin_trap();
 }
-} // namespace mikos
+} // namespace osplay

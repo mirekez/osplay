@@ -1,6 +1,6 @@
 #include <drivers/net/net.hpp>
 
-namespace mikos::drivers::net {
+namespace osplay::drivers::net {
 namespace {
 
 inline constexpr u32 mac_base = 0x8200e000;
@@ -198,4 +198,4 @@ bool transmit(const u8* frame, u32 size) {
   return wait_for_tx();
 }
 
-}  // namespace mikos::drivers::net
+}  // namespace osplay::drivers::net

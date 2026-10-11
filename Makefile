@@ -10,10 +10,10 @@ LD := $(RISCV_PREFIX)ld
 OBJCOPY := $(RISCV_PREFIX)objcopy
 
 .DEFAULT_GOAL := all
-.PHONY: mikos-tap
-mikos-tap:
+.PHONY: osplay-tap
+osplay-tap:
 	bash tests/network/build_tap.sh
-tribe-tap extreme-tap: mikos-tap
+tribe-tap extreme-tap: osplay-tap
 include support/kernel-cxx/flags.mk
 
 RV_FLAGS = --target=riscv32-unknown-elf -march=rv32ima_zicsr -mabi=ilp32 \
@@ -24,8 +24,8 @@ RV_FLAGS = --target=riscv32-unknown-elf -march=rv32ima_zicsr -mabi=ilp32 \
 	-ffunction-sections -Wall -Wextra -Werror -O2 -g \
 	-I$(ROOT) -I$(ROOT)/include -MMD -MP $(KERNEL_CXX_TARGET_HEADERS)
 
-KERNEL_ELF := $(BUILD)/mikos-rv32.elf
-KERNEL_MAP := $(BUILD)/mikos-rv32.map
+KERNEL_ELF := $(BUILD)/osplay-rv32.elf
+KERNEL_MAP := $(BUILD)/osplay-rv32.map
 KERNEL_SOURCES := \
 	kernel/main.cpp \
 	kernel/runtime.cpp \
@@ -49,9 +49,9 @@ KERNEL_OBJECTS := $(patsubst %.cpp,$(BUILD)/%.o,$(filter %.cpp,$(KERNEL_SOURCES)
 KERNEL_DEPS := $(KERNEL_OBJECTS:.o=.d)
 
 TRIBE_RV_FLAGS = $(subst -march=rv32ima_zicsr,-march=rv32im_zicsr,$(RV_FLAGS)) \
-	-DMIKOS_TRIBE
-TRIBE_KERNEL_ELF := $(BUILD)/mikos-tribe-rv32.elf
-TRIBE_KERNEL_MAP := $(BUILD)/mikos-tribe-rv32.map
+	-DOSPLAY_TRIBE
+TRIBE_KERNEL_ELF := $(BUILD)/osplay-tribe-rv32.elf
+TRIBE_KERNEL_MAP := $(BUILD)/osplay-tribe-rv32.map
 TRIBE_KERNEL_SOURCES := \
 	kernel/main.cpp \
 	kernel/runtime.cpp \
@@ -74,19 +74,19 @@ TRIBE_KERNEL_OBJECTS := \
 	$(patsubst %.cpp,$(BUILD)/tribe/%.o,$(filter %.cpp,$(TRIBE_KERNEL_SOURCES))) \
 	$(patsubst %.S,$(BUILD)/tribe/%.o,$(filter %.S,$(TRIBE_KERNEL_SOURCES)))
 TRIBE_KERNEL_DEPS := $(TRIBE_KERNEL_OBJECTS:.o=.d)
-TRIBE_INTERACTIVE_RV_FLAGS = $(TRIBE_RV_FLAGS) -DMIKOS_TRIBE_INTERACTIVE -DMIKOS_INTERACTIVE
-TRIBE_INTERACTIVE_ELF := $(BUILD)/mikos-tribe-interactive-rv32.elf
-TRIBE_INTERACTIVE_MAP := $(BUILD)/mikos-tribe-interactive-rv32.map
+TRIBE_INTERACTIVE_RV_FLAGS = $(TRIBE_RV_FLAGS) -DOSPLAY_TRIBE_INTERACTIVE -DOSPLAY_INTERACTIVE
+TRIBE_INTERACTIVE_ELF := $(BUILD)/osplay-tribe-interactive-rv32.elf
+TRIBE_INTERACTIVE_MAP := $(BUILD)/osplay-tribe-interactive-rv32.map
 TRIBE_INTERACTIVE_OBJECTS := \
 	$(patsubst %.cpp,$(BUILD)/tribe-interactive/%.o,$(filter %.cpp,$(TRIBE_KERNEL_SOURCES))) \
 	$(patsubst %.S,$(BUILD)/tribe-interactive/%.o,$(filter %.S,$(TRIBE_KERNEL_SOURCES)))
 TRIBE_INTERACTIVE_DEPS := $(TRIBE_INTERACTIVE_OBJECTS:.o=.d)
 TRIBE_INTERACTIVE_MULTICORE_RV_FLAGS = $(TRIBE_INTERACTIVE_RV_FLAGS) \
-	-DMIKOS_TRIBE_MULTICORE
+	-DOSPLAY_TRIBE_MULTICORE
 TRIBE_INTERACTIVE_MULTICORE_ELF := \
-	$(BUILD)/mikos-tribe-interactive-multicore-rv32.elf
+	$(BUILD)/osplay-tribe-interactive-multicore-rv32.elf
 TRIBE_INTERACTIVE_MULTICORE_MAP := \
-	$(BUILD)/mikos-tribe-interactive-multicore-rv32.map
+	$(BUILD)/osplay-tribe-interactive-multicore-rv32.map
 TRIBE_INTERACTIVE_MULTICORE_OBJECTS := \
 	$(patsubst %.cpp,$(BUILD)/tribe-interactive-multicore/%.o,$(filter %.cpp,$(TRIBE_KERNEL_SOURCES))) \
 	$(patsubst %.S,$(BUILD)/tribe-interactive-multicore/%.o,$(filter %.S,$(TRIBE_KERNEL_SOURCES)))
@@ -197,14 +197,14 @@ stress-ng:
 	$(MAKE) -C tests/busybox stress-ng
 
 $(ROOTFS_IMAGE): tests/busybox/Makefile \
-		$(BUILD)/mikos_ssh_key.pub \
+		$(BUILD)/osplay_ssh_key.pub \
 		tests/busybox/config/busybox.config \
 		tests/busybox/config/dropbear_localoptions.h \
 		tests/busybox/download_busybox.sh \
 		tests/busybox/build_busybox.sh \
 		tests/busybox/download_dropbear.sh \
 		tests/busybox/build_dropbear.sh \
-		tests/busybox/patches/dropbear-mikos.patch \
+		tests/busybox/patches/dropbear-osplay.patch \
 		tests/busybox/rootfs/etc/group \
 		tests/busybox/rootfs/etc/inittab \
 		tests/busybox/rootfs/etc/passwd \
@@ -215,13 +215,13 @@ $(ROOTFS_IMAGE): tests/busybox/Makefile \
 		tests/busybox/rootfs/root/.ssh/authorized_keys \
 		tests/busybox/set_rootfs_owners.sh \
 		tests/busybox/verify_rootfs.sh \
-		tests/busybox/patches/stress-ng-mikos.patch
+		tests/busybox/patches/stress-ng-osplay.patch
 	$(MAKE) -C tests/busybox rootfs
 
-$(BUILD)/mikos_ssh_key:
+$(BUILD)/osplay_ssh_key:
 	$(MAKE) -C tests/busybox $@
 
-$(BUILD)/mikos_ssh_key.pub: $(BUILD)/mikos_ssh_key
+$(BUILD)/osplay_ssh_key.pub: $(BUILD)/osplay_ssh_key
 	$(MAKE) -C tests/busybox $@
 
 $(TRIBE_EMBEDDED_BUSYBOX_OBJECT): $(ROOTFS_IMAGE)
@@ -274,14 +274,14 @@ $(KERNEL_ELF): $(KERNEL_OBJECTS) \
 	$(LD) -m elf32lriscv -nostdlib --gc-sections \
 		-T kernel/arch/riscv32/linker.ld \
 		-Map $(KERNEL_MAP) -o $@ $(KERNEL_OBJECTS)
-	$(LLVM_READELF) -h -l $@ > $(BUILD)/mikos-rv32.headers.txt
+	$(LLVM_READELF) -h -l $@ > $(BUILD)/osplay-rv32.headers.txt
 
 $(TRIBE_KERNEL_ELF): $(TRIBE_KERNEL_OBJECTS) \
 		kernel/arch/riscv32/linker.ld
 	$(LD) -m elf32lriscv -nostdlib --gc-sections \
 		-T kernel/arch/riscv32/linker.ld \
 		-Map $(TRIBE_KERNEL_MAP) -o $@ $(TRIBE_KERNEL_OBJECTS)
-	$(LLVM_READELF) -h -l $@ > $(BUILD)/mikos-tribe-rv32.headers.txt
+	$(LLVM_READELF) -h -l $@ > $(BUILD)/osplay-tribe-rv32.headers.txt
 
 $(TRIBE_INTERACTIVE_ELF): $(TRIBE_INTERACTIVE_OBJECTS) \
 		$(TRIBE_EMBEDDED_BUSYBOX_OBJECT) \
@@ -293,7 +293,7 @@ $(TRIBE_INTERACTIVE_ELF): $(TRIBE_INTERACTIVE_OBJECTS) \
 		$(TRIBE_INTERACTIVE_OBJECTS) $(TRIBE_EMBEDDED_BUSYBOX_OBJECT) \
 		$(TRIBE_EMBEDDED_DROPBEAR_OBJECT)
 	$(LLVM_READELF) -h -l $@ > \
-		$(BUILD)/mikos-tribe-interactive-rv32.headers.txt
+		$(BUILD)/osplay-tribe-interactive-rv32.headers.txt
 
 $(TRIBE_INTERACTIVE_MULTICORE_ELF): \
 		$(TRIBE_INTERACTIVE_MULTICORE_OBJECTS) \
@@ -307,7 +307,7 @@ $(TRIBE_INTERACTIVE_MULTICORE_ELF): \
 		$(TRIBE_EMBEDDED_BUSYBOX_OBJECT) \
 		$(TRIBE_EMBEDDED_DROPBEAR_OBJECT)
 	$(LLVM_READELF) -h -l $@ > \
-		$(BUILD)/mikos-tribe-interactive-multicore-rv32.headers.txt
+		$(BUILD)/osplay-tribe-interactive-multicore-rv32.headers.txt
 
 run: $(ROOTFS_IMAGE) $(KERNEL_ELF) $(QEMU)
 	tests/qemu/run.sh
@@ -367,12 +367,12 @@ tribe-interactive-ssh-test: $(ROOTFS_IMAGE) \
 qemu-ssh-top: ethgig-tap
 	tests/qemu/run_qemu_ssh.sh
 
-$(NET_PEER): tests/qemu/net_peer.cpp include/mikos/net/ethernet.hpp
+$(NET_PEER): tests/qemu/net_peer.cpp include/osplay/net/ethernet.hpp
 	@mkdir -p $(@D)
 	$(CXX) -std=c++2c -fno-exceptions -fno-rtti -Wall -Wextra -Werror \
 		-I$(ROOT)/include $< -o $@
 
-$(TRIBE_NET_PEER): tests/tribe/net_peer.cpp include/mikos/net/ethernet.hpp
+$(TRIBE_NET_PEER): tests/tribe/net_peer.cpp include/osplay/net/ethernet.hpp
 	@mkdir -p $(@D)
 	$(CXX) -std=c++2c -fno-exceptions -fno-rtti -Wall -Wextra -Werror \
 		-I$(ROOT)/include $< -o $@
@@ -392,19 +392,19 @@ clean:
 	$(MAKE) -C tests/busybox clean
 	rm -f $(KERNEL_OBJECTS) $(KERNEL_DEPS) $(KERNEL_ELF) $(KERNEL_MAP) \
 		$(TRIBE_KERNEL_OBJECTS) $(TRIBE_KERNEL_DEPS) $(TRIBE_KERNEL_ELF) \
-		$(TRIBE_KERNEL_MAP) $(BUILD)/mikos-tribe-rv32.headers.txt \
+		$(TRIBE_KERNEL_MAP) $(BUILD)/osplay-tribe-rv32.headers.txt \
 		$(TRIBE_INTERACTIVE_OBJECTS) $(TRIBE_INTERACTIVE_DEPS) \
 		$(TRIBE_INTERACTIVE_ELF) $(TRIBE_INTERACTIVE_MAP) \
-		$(BUILD)/mikos-tribe-interactive-rv32.headers.txt \
+		$(BUILD)/osplay-tribe-interactive-rv32.headers.txt \
 		$(TRIBE_INTERACTIVE_MULTICORE_OBJECTS) \
 		$(TRIBE_INTERACTIVE_MULTICORE_DEPS) \
 		$(TRIBE_INTERACTIVE_MULTICORE_ELF) \
 		$(TRIBE_INTERACTIVE_MULTICORE_MAP) \
 		$(TRIBE_EMBEDDED_BUSYBOX_OBJECT) \
 		$(TRIBE_EMBEDDED_DROPBEAR_OBJECT) \
-		$(BUILD)/mikos-tribe-interactive-multicore-rv32.headers.txt \
-		$(BUILD)/mikos-rv32.headers.txt $(BUILD)/mikos-rv32.sections.txt \
-		$(BUILD)/mikos-rv32.undefined.txt $(NET_PEER) $(ETHGIG_TAP)
+		$(BUILD)/osplay-tribe-interactive-multicore-rv32.headers.txt \
+		$(BUILD)/osplay-rv32.headers.txt $(BUILD)/osplay-rv32.sections.txt \
+		$(BUILD)/osplay-rv32.undefined.txt $(NET_PEER) $(ETHGIG_TAP)
 	@rm -f $(TRIBE_NET_PEER)
 
 -include $(KERNEL_DEPS) $(TRIBE_KERNEL_DEPS) $(TRIBE_INTERACTIVE_DEPS) \

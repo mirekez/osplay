@@ -1,11 +1,11 @@
 #pragma once
 
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 #include <algorithm>
 #include <array>
 #include <span>
 
-namespace mikos::drivers::storage {
+namespace osplay::drivers::storage {
 
 template <typename Device>
 concept SectorDevice = requires(Device& device, u64 sector, u8* output) {
@@ -147,4 +147,4 @@ class SectorReader {
   bool cache_valid_{};
 };
 
-}  // namespace mikos::drivers::storage
+}  // namespace osplay::drivers::storage

@@ -1,7 +1,7 @@
 #include <drivers/uart/uart.hpp>
 #include <kernel/arch/extreme/platform.hpp>
 
-namespace mikos::drivers::uart {
+namespace osplay::drivers::uart {
 bool initialize() {
   return extreme_platform::read(::extreme::devices::identity) == ::extreme::devices::device_id;
 }
@@ -18,12 +18,12 @@ bool receive(u8 &value) {
   value = static_cast<u8>(extreme_platform::read(::extreme::devices::uart_rx));
   return true;
 }
-} // namespace mikos::drivers::uart
+} // namespace osplay::drivers::uart
 
-namespace mikos::extreme_platform {
+namespace osplay::extreme_platform {
 void write_text(const char *text) {
   while (*text) {
     drivers::uart::put(static_cast<u8>(*text++));
   }
 }
-} // namespace mikos::extreme_platform
+} // namespace osplay::extreme_platform

@@ -1,15 +1,15 @@
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 
 extern "C" void* memcpy(void* destination, const void* source,
-                        mikos::usize size) {
-  auto* out = static_cast<mikos::u8*>(destination);
-  const auto* in = static_cast<const mikos::u8*>(source);
-  using Word [[gnu::may_alias]] = mikos::u32;
-  if (((reinterpret_cast<mikos::usize>(out) |
-        reinterpret_cast<mikos::usize>(in)) &
+                        osplay::usize size) {
+  auto* out = static_cast<osplay::u8*>(destination);
+  const auto* in = static_cast<const osplay::u8*>(source);
+  using Word [[gnu::may_alias]] = osplay::u32;
+  if (((reinterpret_cast<osplay::usize>(out) |
+        reinterpret_cast<osplay::usize>(in)) &
        (sizeof(Word) - 1)) == 0) {
-    constexpr mikos::usize words_per_block = 8;
-    constexpr mikos::usize block_size = words_per_block * sizeof(Word);
+    constexpr osplay::usize words_per_block = 8;
+    constexpr osplay::usize block_size = words_per_block * sizeof(Word);
     while (size >= block_size) {
       auto* word_out = reinterpret_cast<Word*>(out);
       const auto* word_in = reinterpret_cast<const Word*>(in);
@@ -40,33 +40,33 @@ extern "C" void* memcpy(void* destination, const void* source,
 }
 
 extern "C" void* memmove(void* destination, const void* source,
-                         mikos::usize size) {
-  auto* out = static_cast<mikos::u8*>(destination);
-  const auto* in = static_cast<const mikos::u8*>(source);
+                         osplay::usize size) {
+  auto* out = static_cast<osplay::u8*>(destination);
+  const auto* in = static_cast<const osplay::u8*>(source);
   if (out < in) {
-    for (mikos::usize i = 0; i < size; ++i) {
+    for (osplay::usize i = 0; i < size; ++i) {
       out[i] = in[i];
     }
   } else if (out > in) {
-    for (mikos::usize i = size; i != 0; --i) {
+    for (osplay::usize i = size; i != 0; --i) {
       out[i - 1] = in[i - 1];
     }
   }
   return destination;
 }
 
-extern "C" void* memset(void* destination, int value, mikos::usize size) {
-  auto* out = static_cast<mikos::u8*>(destination);
-  const auto byte = static_cast<mikos::u8>(value);
+extern "C" void* memset(void* destination, int value, osplay::usize size) {
+  auto* out = static_cast<osplay::u8*>(destination);
+  const auto byte = static_cast<osplay::u8>(value);
   while (size != 0 &&
-         (reinterpret_cast<mikos::usize>(out) &
-          (sizeof(mikos::u32) - 1)) != 0) {
+         (reinterpret_cast<osplay::usize>(out) &
+          (sizeof(osplay::u32) - 1)) != 0) {
     *out++ = byte;
     --size;
   }
-  const mikos::u32 word = static_cast<mikos::u32>(byte) * 0x01010101u;
+  const osplay::u32 word = static_cast<osplay::u32>(byte) * 0x01010101u;
   while (size >= sizeof(word)) {
-    *reinterpret_cast<mikos::u32*>(out) = word;
+    *reinterpret_cast<osplay::u32*>(out) = word;
     out += sizeof(word);
     size -= sizeof(word);
   }
@@ -79,17 +79,17 @@ extern "C" void* memset(void* destination, int value, mikos::usize size) {
 
 namespace {
 
-[[nodiscard]] mikos::u64 divide_u64(mikos::u64 dividend,
-                                    mikos::u64 divisor,
-                                    mikos::u64* remainder) {
+[[nodiscard]] osplay::u64 divide_u64(osplay::u64 dividend,
+                                    osplay::u64 divisor,
+                                    osplay::u64* remainder) {
   if (divisor == 0) {
     for (;;) {
       asm volatile("wfi");
     }
   }
-  mikos::u64 quotient = 0;
-  mikos::u64 current = 0;
-  for (mikos::u32 bit = 0; bit < 64; ++bit) {
+  osplay::u64 quotient = 0;
+  osplay::u64 current = 0;
+  for (osplay::u32 bit = 0; bit < 64; ++bit) {
     current = (current << 1) | (dividend >> 63);
     dividend <<= 1;
     quotient <<= 1;
@@ -106,22 +106,22 @@ namespace {
 
 }  // namespace
 
-extern "C" mikos::u64 __udivdi3(mikos::u64 dividend,
-                                  mikos::u64 divisor) {
+extern "C" osplay::u64 __udivdi3(osplay::u64 dividend,
+                                  osplay::u64 divisor) {
   return divide_u64(dividend, divisor, nullptr);
 }
 
-extern "C" mikos::u64 __umoddi3(mikos::u64 dividend,
-                                  mikos::u64 divisor) {
-  mikos::u64 remainder{};
+extern "C" osplay::u64 __umoddi3(osplay::u64 dividend,
+                                  osplay::u64 divisor) {
+  osplay::u64 remainder{};
   static_cast<void>(divide_u64(dividend, divisor, &remainder));
   return remainder;
 }
 
-extern "C" int memcmp(const void* left, const void* right, mikos::usize size) {
-  const auto* a = static_cast<const mikos::u8*>(left);
-  const auto* b = static_cast<const mikos::u8*>(right);
-  for (mikos::usize i = 0; i < size; ++i) {
+extern "C" int memcmp(const void* left, const void* right, osplay::usize size) {
+  const auto* a = static_cast<const osplay::u8*>(left);
+  const auto* b = static_cast<const osplay::u8*>(right);
+  for (osplay::usize i = 0; i < size; ++i) {
     if (a[i] != b[i]) {
       return static_cast<int>(a[i]) - static_cast<int>(b[i]);
     }

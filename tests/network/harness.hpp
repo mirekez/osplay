@@ -5,16 +5,16 @@
 #include <cstdlib>
 #include <deque>
 #include <iostream>
-#include <mikos/arch.hpp>
-#include <mikos/kernel.hpp>
-#include <mikos/net/tcp.hpp>
+#include <osplay/arch.hpp>
+#include <osplay/kernel.hpp>
+#include <osplay/net/tcp.hpp>
 #include <span>
 #include <string_view>
 #include <vector>
 
 namespace tcp_test {
-using namespace mikos;
-using namespace mikos::network;
+using namespace osplay;
+using namespace osplay::network;
 using Bytes = std::vector<u8>;
 inline constexpr u64 ticks_per_ms = 10'000;
 inline constexpr Ipv4Address guest_ip{{10, 0, 2, 15}};

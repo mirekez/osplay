@@ -4,7 +4,7 @@
 
 namespace {
 
-using namespace mikos;
+using namespace osplay;
 
 [[nodiscard]] bool text_is(const char* actual, const char* expected) {
   while (*actual == *expected) {
@@ -17,29 +17,29 @@ using namespace mikos;
   return false;
 }
 
-void check(mikos::test::Suite& suite, const char* cwd, const char* input,
+void check(osplay::test::Suite& suite, const char* cwd, const char* input,
            const char* expected) {
   char output[path::capacity]{};
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               path::canonicalize(cwd, input, output, sizeof(output)));
-  MIKOS_CHECK(suite, text_is(output, expected));
+  OSPLAY_CHECK(suite, text_is(output, expected));
 }
 
 }  // namespace
 
 int main() {
-  mikos::test::Suite suite{"kernel/path"};
-  MIKOS_CHECK(suite, path::numbered_suffix("/dev/pts/0", "/dev/pts/", 4) == 0);
-  MIKOS_CHECK(suite, path::numbered_suffix("/dev/pts/3", "/dev/pts/", 4) == 3);
-  MIKOS_CHECK(suite, path::numbered_suffix("/dev/pts/4", "/dev/pts/", 4) ==
+  osplay::test::Suite suite{"kernel/path"};
+  OSPLAY_CHECK(suite, path::numbered_suffix("/dev/pts/0", "/dev/pts/", 4) == 0);
+  OSPLAY_CHECK(suite, path::numbered_suffix("/dev/pts/3", "/dev/pts/", 4) == 3);
+  OSPLAY_CHECK(suite, path::numbered_suffix("/dev/pts/4", "/dev/pts/", 4) ==
                          path::invalid_number);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               path::numbered_suffix("/proc/self/fd/15", "/proc/self/fd/", 16) ==
                   15);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               path::numbered_suffix("/proc/self/fd/16", "/proc/self/fd/", 16) ==
                   path::invalid_number);
-  MIKOS_CHECK(suite,
+  OSPLAY_CHECK(suite,
               path::numbered_suffix("/proc/self/fd/x", "/proc/self/fd/", 16) ==
                   path::invalid_number);
   check(suite, "/", "/", "/");
@@ -50,9 +50,9 @@ int main() {
   check(suite, "/ignored", "//bin///busybox", "/bin/busybox");
 
   char output[4]{};
-  MIKOS_CHECK(suite, !path::canonicalize("/", "tool", output,
+  OSPLAY_CHECK(suite, !path::canonicalize("/", "tool", output,
                                          sizeof(output)));
-  MIKOS_CHECK(suite, !path::canonicalize("/bin", "", output,
+  OSPLAY_CHECK(suite, !path::canonicalize("/bin", "", output,
                                          sizeof(output)));
   return suite.finish();
 }

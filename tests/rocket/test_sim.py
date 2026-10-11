@@ -66,7 +66,7 @@ def main():
     started = time.monotonic()
     default_timeout = "7200" if args.mode == "process" else "3600"
     deadline = started + float(os.environ.get("ROCKET_TIMEOUT", default_timeout))
-    with tempfile.TemporaryDirectory(prefix="mikos-rocket-") as runtime, \
+    with tempfile.TemporaryDirectory(prefix="osplay-rocket-") as runtime, \
             socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as peer, \
             log_path.open("wb", buffering=0) as log:
         path = str(Path(runtime) / "net.sock")
@@ -109,19 +109,19 @@ def main():
                             if echo_ok(frame) and not echo:
                                 echo = True
                                 print("PASS: real Rocket DMA ICMP reply, 512 payload bytes and checksums", flush=True)
-                for marker in ("MIKOS:BOOT", "MIKOS:KERNEL_CXX_OK", "MIKOS:EXT4_ROOT_OK",
-                               "MIKOS:BUSYBOX_ENTRY", "MIKOS:DROPBEAR_ENTRY", "MIKOS:TCP_LISTEN 22",
+                for marker in ("OSPLAY:BOOT", "OSPLAY:KERNEL_CXX_OK", "OSPLAY:EXT4_ROOT_OK",
+                               "OSPLAY:BUSYBOX_ENTRY", "OSPLAY:DROPBEAR_ENTRY", "OSPLAY:TCP_LISTEN 22",
                                "ROCKET_PROCESS_OK"):
                     if marker + "\n" in text and marker not in reported:
                         reported.add(marker)
                         print(f"[{time.monotonic() - started:.1f}s] {marker}", flush=True)
-                if args.mode == "boot" and "MIKOS:FLAT_DEVICE_IRQ_OFF\n" in text:
-                    if "MIKOS:KERNEL_CXX_OK\n" not in text:
+                if args.mode == "boot" and "OSPLAY:FLAT_DEVICE_IRQ_OFF\n" in text:
+                    if "OSPLAY:KERNEL_CXX_OK\n" not in text:
                         raise RuntimeError("missing C++ runtime proof")
                     print(f"PASS: Rocket boot and C++ runtime; log: {log_path}")
                     return
                 if (remote and args.mode == "ping" and not echo
-                        and "MIKOS:NETWORK_TIMER_ON\n" in text
+                        and "OSPLAY:NETWORK_TIMER_ON\n" in text
                         and time.monotonic() >= next_packet):
                     # Wall time is much faster than simulated time. Avoid filling
                     # the NIC with retries while the guest is still booting.
@@ -150,8 +150,8 @@ def main():
                     text += remaining.decode(errors="replace").replace("\r", "")
                     if proc.returncode:
                         raise RuntimeError(f"simulator exit {proc.returncode}")
-                    for marker in ("MIKOS:BOOT", "MIKOS:KERNEL_CXX_OK", "MIKOS:EXT4_ROOT_OK",
-                                   "MIKOS:PMP_ON", "MIKOS:BUSYBOX_EXIT 0", "MIKOS:EXIT 0"):
+                    for marker in ("OSPLAY:BOOT", "OSPLAY:KERNEL_CXX_OK", "OSPLAY:EXT4_ROOT_OK",
+                                   "OSPLAY:PMP_ON", "OSPLAY:BUSYBOX_EXIT 0", "OSPLAY:EXIT 0"):
                         if marker + "\n" not in text:
                             raise RuntimeError(f"missing {marker}")
                     marker = "ROCKET_SHELL_OK" if args.mode == "ping" else "ROCKET_PROCESS_OK"
@@ -173,7 +173,7 @@ def main():
                     proc.kill()
                     proc.wait()
             selector.close()
-            Path(f"/tmp/mikos-rocket-net-{proc.pid}.sock").unlink(missing_ok=True)
+            Path(f"/tmp/osplay-rocket-net-{proc.pid}.sock").unlink(missing_ok=True)
             print(f"UART log: {log_path}", flush=True)
 
 

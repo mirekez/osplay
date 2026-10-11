@@ -31,7 +31,7 @@ if patch -l -d "$source_tree" -p1 --forward --dry-run \
   patch -l -d "$source_tree" -p1 <"$patch_file"
 elif ! patch -l -d "$source_tree" -p1 --reverse --dry-run \
     <"$patch_file" >/dev/null 2>&1; then
-  echo "Dropbear MikOS patch does not apply cleanly" >&2
+  echo "Dropbear OSplay patch does not apply cleanly" >&2
   exit 1
 fi
 

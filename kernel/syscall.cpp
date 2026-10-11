@@ -1,22 +1,22 @@
-#include <mikos/arch.hpp>
+#include <osplay/arch.hpp>
 #include <drivers/fs/root.hpp>
 #include <kernel/pseudo_filesystem.hpp>
 #include <drivers/uart/uart.hpp>
 #include <kernel/path.hpp>
-#include <mikos/kernel.hpp>
-#include <mikos/abi/riscv32.hpp>
-#include <mikos/abi/socket.hpp>
-#include <mikos/process/model.hpp>
-#include <mikos/process/pipe.hpp>
-#include <mikos/process/signal.hpp>
-#include <mikos/process/snapshot_arena.hpp>
-#include <mikos/process/pty.hpp>
-#include <mikos/memory/boot_array.hpp>
-#include <mikos/io/scatter_write.hpp>
+#include <osplay/kernel.hpp>
+#include <osplay/abi/riscv32.hpp>
+#include <osplay/abi/socket.hpp>
+#include <osplay/process/model.hpp>
+#include <osplay/process/pipe.hpp>
+#include <osplay/process/signal.hpp>
+#include <osplay/process/snapshot_arena.hpp>
+#include <osplay/process/pty.hpp>
+#include <osplay/memory/boot_array.hpp>
+#include <osplay/io/scatter_write.hpp>
 
-extern "C" void* memset(void*, int, mikos::usize);
-extern "C" void* memcpy(void*, const void*, mikos::usize);
-#ifdef MIKOS_EXTREME_USERSPACE
+extern "C" void* memset(void*, int, osplay::usize);
+extern "C" void* memcpy(void*, const void*, osplay::usize);
+#ifdef OSPLAY_EXTREME_USERSPACE
 extern "C" unsigned char* extreme_snapshot_begin();
 extern "C" unsigned char* extreme_snapshot_end();
 #define __fork_snapshot_arena_begin extreme_snapshot_begin()
@@ -26,7 +26,7 @@ extern "C" unsigned char __fork_snapshot_arena_begin[];
 extern "C" unsigned char __fork_snapshot_arena_end[];
 #endif
 
-namespace mikos {
+namespace osplay {
 namespace {
 
 using abi::riscv32::Errno;
@@ -253,9 +253,9 @@ void refresh_child_waitable() {
   snapshot_arena_initialized =
       snapshot_arena.initialize(begin, end) ==
       process_model::SnapshotArenaStatus::success;
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
   if (snapshot_arena_initialized) {
-    write_text("MIKOS:FORK_ARENA begin=");
+    write_text("OSPLAY:FORK_ARENA begin=");
     write_u32(begin);
     write_text(" end=");
     write_u32(end);
@@ -282,7 +282,7 @@ void release_snapshot(process_model::SnapshotAllocation& allocation) {
   }
   if (snapshot_arena.release(allocation) !=
       process_model::SnapshotArenaStatus::success) {
-    write_text("MIKOS:FORK_ARENA_CORRUPT\n");
+    write_text("OSPLAY:FORK_ARENA_CORRUPT\n");
     shutdown(9);
   }
   allocation = {};
@@ -302,8 +302,8 @@ void release_snapshot(process_model::SnapshotAllocation& allocation) {
   parent.stack_size = user_stack_top - parent.stack_begin;
   const u64 total = static_cast<u64>(parent.mutable_size) +
                     parent.mmap_size + parent.stack_size;
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:CLONE_COPY mutable=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:CLONE_COPY mutable=");
   write_u32(parent.mutable_size);
   write_text(" mmap=");
   write_u32(parent.mmap_size);
@@ -313,8 +313,8 @@ void release_snapshot(process_model::SnapshotAllocation& allocation) {
 #endif
   if (total > ~u32{0} ||
       !allocate_snapshot(static_cast<u32>(total), parent.snapshot)) {
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-    write_text("MIKOS:FORK_ARENA_ENOMEM requested=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+    write_text("OSPLAY:FORK_ARENA_ENOMEM requested=");
     write_u32(total > ~u32{0} ? ~u32{0} : static_cast<u32>(total));
     write_text(" available=");
     write_u32(snapshot_arena.available());
@@ -348,7 +348,7 @@ void resume_parent(TrapFrame& frame, u32 status, bool child_completed,
   // segments, then apply its private writable/mmap/stack snapshot.
   if (process.image != parent.image &&
       !restore_executable_image(parent.executable_path)) {
-    write_text("MIKOS:PROCESS_IMAGE_RESTORE_FAIL\n");
+    write_text("OSPLAY:PROCESS_IMAGE_RESTORE_FAIL\n");
     shutdown(9);
   }
   if (parent.memory_saved) {
@@ -367,7 +367,7 @@ void resume_parent(TrapFrame& frame, u32 status, bool child_completed,
   }
   frame = parent.frame;
   if (return_from_clone) {
-#ifdef MIKOS_EXTREME_USERSPACE
+#ifdef OSPLAY_EXTREME_USERSPACE
     frame.extreme_retry = false;
 #endif
     frame.x[10] = parent.child_pid;
@@ -416,8 +416,8 @@ void restore_parent(TrapFrame& frame, u32 status) {
 
 [[nodiscard]] i32 clone(TrapFrame& frame, u32 flags, u32 stack,
                         u32 child_tid) {
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:CLONE_START\n");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:CLONE_START\n");
 #endif
   constexpr u32 signal_mask = 0xff;
   constexpr u32 sigchld = 17;
@@ -483,8 +483,8 @@ void restore_parent(TrapFrame& frame, u32 status) {
     reinstate_suspended_ancestor(frame);
     return error(Errno::no_memory);
   }
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:CLONE_DONE\n");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:CLONE_DONE\n");
 #endif
   const auto child_lineage = process_model::fork_lineage(
       parent.lineage, parent.child_pid);
@@ -858,8 +858,8 @@ void capture_interactive_child(TrapFrame& frame,
   capture_interactive_child(frame, wait_pty, wait_end);
   interactive_child.wait_deadline = deadline;
   if (!save_interactive_child_memory()) {
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-    write_text("MIKOS:PTY_CHILD_PARK_ENOMEM mutable=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+    write_text("OSPLAY:PTY_CHILD_PARK_ENOMEM mutable=");
     write_u32(interactive_child.mutable_size);
     write_text(" mmap=");
     write_u32(interactive_child.mmap_size);
@@ -900,8 +900,8 @@ void capture_interactive_child(TrapFrame& frame,
       nested_ancestor_standard_redirects[level][i] = {};
     }
     interactive_relay_service_pid = parent.lineage.pid;
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-    write_text("MIKOS:PTY_CHILD_RELAY child=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+    write_text("OSPLAY:PTY_CHILD_RELAY child=");
     write_u32(interactive_child.pid);
     write_text(" parent=");
     write_u32(interactive_parent.lineage.pid);
@@ -910,8 +910,8 @@ void capture_interactive_child(TrapFrame& frame,
     write_text("\n");
 #endif
   }
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:PTY_CHILD_PARK child=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:PTY_CHILD_PARK child=");
   write_u32(interactive_child.pid);
   write_text(" parent=");
   write_u32(interactive_child.parent_pid);
@@ -983,7 +983,7 @@ void capture_interactive_child(TrapFrame& frame,
     // ancestry. Stack it, then restore the shell as the interactive program's
     // immediate parent so normal exit/wait/SIGCHLD semantics remain intact.
     if (!stack_suspended_ancestor()) {
-      write_text("MIKOS:PTY_CHILD_RELAY_STACK_FAIL\n");
+      write_text("OSPLAY:PTY_CHILD_RELAY_STACK_FAIL\n");
       shutdown(9);
     }
     parent = interactive_parent;
@@ -1005,7 +1005,7 @@ void capture_interactive_child(TrapFrame& frame,
   reset_descriptors();
   if (process.image != interactive_child.image &&
       !restore_executable_image(interactive_child.executable_path)) {
-    write_text("MIKOS:PTY_CHILD_IMAGE_RESTORE_FAIL\n");
+    write_text("OSPLAY:PTY_CHILD_IMAGE_RESTORE_FAIL\n");
     shutdown(9);
   }
   const auto* snapshot =
@@ -1036,7 +1036,7 @@ void capture_interactive_child(TrapFrame& frame,
         }
       }
     }
-#ifdef MIKOS_EXTREME_USERSPACE
+#ifdef OSPLAY_EXTREME_USERSPACE
     frame.extreme_retry = false;
 #endif
     frame.x[10] = wait_interrupted
@@ -1062,8 +1062,8 @@ void capture_interactive_child(TrapFrame& frame,
          sizeof(process.executable_path));
   process.image_replaced = true;
   interactive_child = {};
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:PTY_CHILD_RESUME child=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:PTY_CHILD_RESUME child=");
   write_u32(child_pid);
   write_text(" parent=");
   write_u32(child_parent_pid);
@@ -1148,8 +1148,8 @@ void capture_background(TrapFrame& frame, network::SocketHandle wait_socket) {
   parent = {};
   background = {};
   ++nested_ancestor_depth;
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:NESTED_CLONE_STACK depth=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:NESTED_CLONE_STACK depth=");
   write_u32(nested_ancestor_depth);
   write_text("\n");
 #endif
@@ -1178,8 +1178,8 @@ void reinstate_suspended_ancestor(TrapFrame& frame) {
         nested_ancestor_standard_redirects[level][i];
     nested_ancestor_standard_redirects[level][i] = {};
   }
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:NESTED_CLONE_UNSTACK depth=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:NESTED_CLONE_UNSTACK depth=");
   write_u32(nested_ancestor_depth);
   write_text("\n");
 #endif
@@ -1243,8 +1243,8 @@ void discard_parked_session() {
       child = {};
     }
   }
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:CHILD_EXIT pid=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:CHILD_EXIT pid=");
   write_u32(process.pid);
   write_text(" status=");
   write_u32(status);
@@ -1256,8 +1256,8 @@ void discard_parked_session() {
   }
   child_tid_address = 0;
   if (background.used && process.pid == background.pid) {
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-    write_text("MIKOS:BACKGROUND_EXIT status=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+    write_text("OSPLAY:BACKGROUND_EXIT status=");
     write_u32(status);
     write_text("\n");
 #endif
@@ -1271,16 +1271,16 @@ void discard_parked_session() {
 
 [[nodiscard]] bool park_background(TrapFrame& frame, network::SocketHandle wait_socket) {
   if (!parent.active) {
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
     static bool reported_no_parent = false;
     if (!reported_no_parent) {
       reported_no_parent = true;
-      write_text("MIKOS:BACKGROUND_PARK_NO_PARENT\n");
+      write_text("OSPLAY:BACKGROUND_PARK_NO_PARENT\n");
     }
 #endif
     return false;
   }
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
   // Once a background service has accepted a connection, keep its image
   // resident while it waits for the peer. Swapping back to the shell here
   // would reload BusyBox from simulated SD, then reload the service for the
@@ -1294,7 +1294,7 @@ void discard_parked_session() {
     static bool reported_connection_hold = false;
     if (!reported_connection_hold) {
       reported_connection_hold = true;
-      write_text("MIKOS:BACKGROUND_CONNECTION_HOLD ");
+      write_text("OSPLAY:BACKGROUND_CONNECTION_HOLD ");
       write_u32(process.pid);
       write_text("\n");
     }
@@ -1311,15 +1311,15 @@ void discard_parked_session() {
   }
 #endif
   if (background.used && process.pid != background.pid) {
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-    write_text("MIKOS:BACKGROUND_PARK_BUSY\n");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+    write_text("OSPLAY:BACKGROUND_PARK_BUSY\n");
 #endif
     return false;
   }
   capture_background(frame, wait_socket);
   if (!save_background_memory()) {
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-    write_text("MIKOS:BACKGROUND_PARK_ENOMEM mutable=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+    write_text("OSPLAY:BACKGROUND_PARK_ENOMEM mutable=");
     write_u32(background.mutable_size);
     write_text(" mmap=");
     write_u32(background.mmap_size);
@@ -1332,8 +1332,8 @@ void discard_parked_session() {
   }
   move_active_descriptors(background_descriptors,
                           background_standard_redirects);
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:BACKGROUND_PARK ");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:BACKGROUND_PARK ");
   write_u32(background.pid);
   write_text("\n");
 #endif
@@ -1386,7 +1386,7 @@ void discard_parked_session() {
   }
   reset_descriptors();
   if (!restore_executable_image(background.executable_path)) {
-    write_text("MIKOS:BACKGROUND_IMAGE_RESTORE_FAIL\n");
+    write_text("OSPLAY:BACKGROUND_IMAGE_RESTORE_FAIL\n");
     shutdown(9);
   }
   const auto* snapshot =
@@ -1425,8 +1425,8 @@ void discard_parked_session() {
   process.image_replaced = true;
   background.wait = BackgroundWait::none;
   arch::set_network_timer_waiting(false);
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:BACKGROUND_RESUME ");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:BACKGROUND_RESUME ");
   write_u32(background.pid);
   write_text("\n");
 #endif
@@ -1698,9 +1698,9 @@ void discard_parked_session() {
     return error(Errno::bad_file_descriptor);
   }
   auto& slot = descriptors[descriptor - 3];
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
   if (slot.node == Node::network_socket) {
-    write_text("MIKOS:TCP_CLOSE fd=");
+    write_text("OSPLAY:TCP_CLOSE fd=");
     write_u32(descriptor);
     write_text(" handle=");
     write_u32(static_cast<u32>(slot.socket.index()));
@@ -1991,10 +1991,10 @@ void discard_parked_session() {
     return error(Errno::bad_file_descriptor);
   }
   const auto result = network::socket_listen(slot->socket, backlog);
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
   if (result == network::SocketResult::success) {
     const auto* socket = network::socket_slot(slot->socket);
-    write_text("MIKOS:TCP_LISTEN ");
+    write_text("OSPLAY:TCP_LISTEN ");
     write_u32(socket == nullptr ? 0 : socket->local.port);
     write_text("\n");
   }
@@ -2052,8 +2052,8 @@ void discard_parked_session() {
   result.node = Node::network_socket;
   result.flags = flags & abi::socket::sock_nonblock;
   result.socket = accepted.handle;
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:TCP_ACCEPT fd=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:TCP_ACCEPT fd=");
   write_u32(accepted_descriptor);
   write_text(" buffered=");
   const auto* accepted_socket = network::socket_slot(accepted.handle);
@@ -2339,7 +2339,7 @@ void discard_parked_session() {
       node.pseudo_node == PseudoFilesystem::Node::proc_net_tcp) {
     return network::tcp_table();
   }
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
   if (node == Node::pseudo && background.used && background.pid == 2 &&
       text_is(background.executable_path, "/usr/sbin/dropbear")) {
     static constexpr const char dropbear_stat[] =
@@ -2370,7 +2370,7 @@ void discard_parked_session() {
     if (node.pseudo_node == PseudoFilesystem::Node::proc_net_tcp) {
       return text_size(network::tcp_table());
     }
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
     if (node.pseudo_node == PseudoFilesystem::Node::proc_pid2_cmdline &&
         background.used && background.pid == 2 &&
         text_is(background.executable_path, "/usr/sbin/dropbear")) {
@@ -2407,16 +2407,16 @@ void discard_parked_session() {
       const auto result = network::socket_read(
           slot.socket, reinterpret_cast<u8*>(address), size);
       if (result.result == network::SocketResult::success) {
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
         static u32 tcp_read_calls = 0;
         ++tcp_read_calls;
         if (tcp_read_calls == 1) {
-          write_text("MIKOS:TCP_READ ");
+          write_text("OSPLAY:TCP_READ ");
           write_u32(result.size);
           write_text("\n");
         }
         if ((tcp_read_calls % 8) == 0 || result.size > 1) {
-          write_text("MIKOS:TCP_READ_PROGRESS calls=");
+          write_text("OSPLAY:TCP_READ_PROGRESS calls=");
           write_u32(tcp_read_calls);
           write_text(" size=");
           write_u32(result.size);
@@ -2474,13 +2474,13 @@ void discard_parked_session() {
   if (slot.node == Node::pty) {
     const auto result =
         ptys.read(slot.pty, slot.pty_end, reinterpret_cast<u8*>(address), size);
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
     static u32 pty_read_reports = 0;
     if (pty_read_reports < 16 &&
         (result.status != process_model::PtyStatus::would_block ||
          result.size != 0)) {
       ++pty_read_reports;
-      write_text("MIKOS:PTY_READ pid=");
+      write_text("OSPLAY:PTY_READ pid=");
       write_u32(process.pid);
       write_text(" fd=");
       write_u32(descriptor);
@@ -2924,12 +2924,12 @@ static_assert(sizeof(Statx) == 256);
         continue;
       }
       const auto* slot = descriptor_slot(static_cast<u32>(descriptor));
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
       static bool reported_ppoll_wait = false;
       if (!reported_ppoll_wait && slot != nullptr &&
           slot->node == Node::network_socket) {
         reported_ppoll_wait = true;
-        write_text("MIKOS:PPOLL_NETWORK_WAIT fd=");
+        write_text("OSPLAY:PPOLL_NETWORK_WAIT fd=");
         write_u32(static_cast<u32>(descriptor));
         write_text("\n");
       }
@@ -3050,12 +3050,12 @@ static_assert(sizeof(Statx) == 256);
         continue;
       }
       const auto* slot = descriptor_slot(descriptor);
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
       static bool reported_pselect_wait = false;
       if (!reported_pselect_wait && slot != nullptr &&
           slot->node == Node::network_socket) {
         reported_pselect_wait = true;
-        write_text("MIKOS:PSELECT_NETWORK_WAIT fd=");
+        write_text("OSPLAY:PSELECT_NETWORK_WAIT fd=");
         write_u32(descriptor);
         write_text("\n");
       }
@@ -3113,7 +3113,7 @@ static_assert(sizeof(Statx) == 256);
   if ((node.file.mode & 0111) == 0) {
     return error(Errno::access_denied);
   }
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
   // The interactive flat-address-space scheduler keeps a blocked background
   // service as a memory snapshot. Starting the same executable again would
   // suspend the shell for another full initialization only to fail bind(2)
@@ -3122,7 +3122,7 @@ static_assert(sizeof(Statx) == 256);
   // an intentional restart is allowed.
   if (background.used &&
       text_is(canonical, background.executable_path)) {
-    write_text("MIKOS:BACKGROUND_EXEC_BUSY pid=");
+    write_text("OSPLAY:BACKGROUND_EXEC_BUSY pid=");
     write_u32(background.pid);
     write_text("\n");
     return error(Errno::text_file_busy);
@@ -3178,11 +3178,11 @@ static_assert(sizeof(Statx) == 256);
       return error(Errno::no_memory);
     }
   }
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
   static u32 exec_reports = 0;
   if (exec_reports < 12) {
     ++exec_reports;
-    write_text("MIKOS:EXEC pid=");
+    write_text("OSPLAY:EXEC pid=");
     write_u32(process.pid);
     write_text(" path=");
     write_text(canonical);
@@ -3357,13 +3357,13 @@ void deliver_pending_signal_impl(TrapFrame& frame) {
     // The current interactive profile only resumes caught/ignored signals.
     // Preserve deterministic fail-closed behavior for an unsupported default
     // terminate/stop action instead of returning to user code silently.
-    write_text("MIKOS:UNHANDLED_SIGNAL ");
+    write_text("OSPLAY:UNHANDLED_SIGNAL ");
     write_u32(signal);
     write_text("\n");
     shutdown(128 + signal);
   }
 
-#ifdef MIKOS_EXTREME_USERSPACE
+#ifdef OSPLAY_EXTREME_USERSPACE
   active_signal_frame = {frame, signals.blocked(), true};
   u64 handler_mask = signals.blocked() | action.mask;
   if ((action.flags & 0x40000000) == 0)
@@ -3393,7 +3393,7 @@ void deliver_pending_signal_impl(TrapFrame& frame) {
 
   active_signal_frame = {frame, signals.blocked(), true};
   // RISC-V Linux normally supplies __kernel_rt_sigreturn from the VDSO.
-  // MikOS has no VDSO yet, so execute the equivalent two instructions from
+  // OSplay has no VDSO yet, so execute the equivalent two instructions from
   // the signal frame (the flat user mapping is executable in this profile).
   signal_frame->return_trampoline[0] = 0x08b00893;  // li a7, 139
   signal_frame->return_trampoline[1] = 0x00000073;  // ecall
@@ -3414,15 +3414,15 @@ void deliver_pending_signal_impl(TrapFrame& frame) {
   }
   frame.mepc = action.handler;
 #endif
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-  write_text("MIKOS:SIGNAL_DELIVER ");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+  write_text("OSPLAY:SIGNAL_DELIVER ");
   write_u32(signal);
   write_text("\n");
 #endif
 }
 
 [[nodiscard]] i32 rt_sigreturn(TrapFrame& frame) {
-#ifdef MIKOS_EXTREME_USERSPACE
+#ifdef OSPLAY_EXTREME_USERSPACE
   if (!active_signal_frame.active) return error(Errno::bad_address);
   static_cast<void>(signals.change_mask(process_model::SignalMaskOperation::set, active_signal_frame.blocked));
   frame = active_signal_frame.frame;
@@ -3474,7 +3474,7 @@ void deliver_pending_signal_impl(TrapFrame& frame) {
   }
   SignalAction32 input{};
   memcpy(&input, reinterpret_cast<const void*>(action_address), sizeof(input));
-#ifdef MIKOS_EXTREME_USERSPACE
+#ifdef OSPLAY_EXTREME_USERSPACE
   // The native context ABI currently delivers one-argument handlers.
   if ((input.flags & 4u) != 0) {
     return error(Errno::invalid_argument);
@@ -3717,7 +3717,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   auto* output = reinterpret_cast<char*>(address);
   memset(output, 0, size);
   constexpr const char* fields[field_count] = {
-      "Mikos", "mikos", "0.1", "rv32-flat", "riscv32", ""};
+      "OSplay", "osplay", "0.1", "rv32-flat", "riscv32", ""};
   for (u32 field = 0; field < field_count; ++field) {
     for (u32 i = 0; fields[field][i] != '\0'; ++i) {
       output[field * field_size + i] = fields[field][i];
@@ -3781,17 +3781,17 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
     }
     const auto result = network::socket_write(
         slot.socket, reinterpret_cast<const u8*>(address), size);
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
     if (result.result == network::SocketResult::success) {
       static u32 tcp_write_calls = 0;
       ++tcp_write_calls;
       if (tcp_write_calls == 1) {
-        write_text("MIKOS:TCP_WRITE ");
+        write_text("OSPLAY:TCP_WRITE ");
         write_u32(result.size);
         write_text("\n");
       }
       if (tcp_write_calls <= 8) {
-        write_text("MIKOS:TCP_WRITE_PROGRESS calls=");
+        write_text("OSPLAY:TCP_WRITE_PROGRESS calls=");
         write_u32(tcp_write_calls);
         write_text(" size=");
         write_u32(result.size);
@@ -3839,8 +3839,8 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
         }
         const u32 targets =
             queue_process_group_signal(foreground_group, signal);
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
-        write_text("MIKOS:PTY_SIGNAL signal=");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
+        write_text("OSPLAY:PTY_SIGNAL signal=");
         write_u32(signal);
         write_text(" group=");
         write_u32(foreground_group);
@@ -3852,11 +3852,11 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
 #endif
       }
     }
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
     static u32 pty_write_reports = 0;
     if (pty_write_reports < 16) {
       ++pty_write_reports;
-      write_text("MIKOS:PTY_WRITE pid=");
+      write_text("OSPLAY:PTY_WRITE pid=");
       write_u32(process.pid);
       write_text(" fd=");
       write_u32(descriptor);
@@ -3964,7 +3964,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return static_cast<i32>(required);
 }
 
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
 [[nodiscard]] i32 uart_ioctl(u32 descriptor, u32 request, u32 address) {
   if (descriptor > 2) {
     return error(Errno::bad_file_descriptor);
@@ -4235,7 +4235,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
 }
 
 [[nodiscard]] i32 ioctl(u32 descriptor, u32 request, u32 address) {
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
   if (descriptor <= 2 && standard_redirects[descriptor].node == Node::none) {
     return uart_ioctl(descriptor, request, address);
   }
@@ -4277,7 +4277,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
     }
     return static_cast<i32>(address);
   }
-#ifdef MIKOS_EXTREME_USERSPACE
+#ifdef OSPLAY_EXTREME_USERSPACE
   const u32 allocation_end = user_heap_end;
 #else
   const u32 allocation_end = user_stack_top;
@@ -4338,7 +4338,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
 }
 
 [[nodiscard]] i32 unknown(u32 number) {
-  write_text("MIKOS:ENOSYS ");
+  write_text("OSPLAY:ENOSYS ");
   write_u32(number);
   write_text(" ");
   write_text(abi::riscv32::name(number));
@@ -4358,35 +4358,35 @@ void deliver_pending_signal(TrapFrame& frame) {
 }
 
 i32 dispatch_syscall(TrapFrame& frame) {
-#ifdef MIKOS_EXTREME_USERSPACE
+#ifdef OSPLAY_EXTREME_USERSPACE
   if (frame.x[17] == 4095) { active_signal_frame = {}; return 0; }
 #endif
 
   static u32 announced_image = ~u32{0};
   if (announced_image != process.image) {
     if (process.image == 0) {
-      write_text("MIKOS:BUSYBOX_ENTRY\n");
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+      write_text("OSPLAY:BUSYBOX_ENTRY\n");
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
     } else if (text_is(process.executable_path, "/usr/sbin/dropbear")) {
-      write_text("MIKOS:DROPBEAR_ENTRY\n");
+      write_text("OSPLAY:DROPBEAR_ENTRY\n");
 #endif
     } else {
-      write_text("MIKOS:STRESS_NG_ENTRY\n");
+      write_text("OSPLAY:STRESS_NG_ENTRY\n");
     }
     announced_image = process.image;
   }
   const u32 number = frame.x[17];
-#if defined(MIKOS_INTERACTIVE) && defined(MIKOS_TRACE_DROPBEAR_SYSCALLS)
+#if defined(OSPLAY_INTERACTIVE) && defined(OSPLAY_TRACE_DROPBEAR_SYSCALLS)
   if (text_is(process.executable_path, "/usr/sbin/dropbear")) {
-    write_text("MIKOS:DROPBEAR_SYSCALL ");
+    write_text("OSPLAY:DROPBEAR_SYSCALL ");
     write_u32(number);
     write_text(" ");
     write_text(abi::riscv32::name(number));
     write_text("\n");
   }
 #endif
-#ifdef MIKOS_TRACE_SYSCALLS
-  write_text("MIKOS:SYSCALL ");
+#ifdef OSPLAY_TRACE_SYSCALLS
+  write_text("OSPLAY:SYSCALL ");
   write_u32(number);
   write_text("\n");
 #endif
@@ -4420,13 +4420,13 @@ i32 dispatch_syscall(TrapFrame& frame) {
     case Syscall::writev:
       return writev(a0, a1, a2);
     case Syscall::pselect6:
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
       return pselect6(frame, a0, a1, a2, a3, a4, false);
 #else
       return unknown(number);
 #endif
     case Syscall::ppoll:
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
       return ppoll(frame, a0, a1, a2, false);
 #else
       return unknown(number);
@@ -4475,14 +4475,14 @@ i32 dispatch_syscall(TrapFrame& frame) {
         return static_cast<i32>(frame.x[10]);
       }
       if (process.image == 0) {
-        write_text("MIKOS:BUSYBOX_EXIT ");
+        write_text("OSPLAY:BUSYBOX_EXIT ");
         write_u32(a0);
         write_text("\n");
         if (a0 != 0) {
           shutdown(a0);
         }
-#if defined(MIKOS_TRIBE) || defined(MIKOS_ROCKET) || defined(MIKOS_EXTREME_USERSPACE)
-        write_text("MIKOS:EXIT 0\n");
+#if defined(OSPLAY_TRIBE) || defined(OSPLAY_ROCKET) || defined(OSPLAY_EXTREME_USERSPACE)
+        write_text("OSPLAY:EXIT 0\n");
         shutdown(0);
 #else
         start_stress_ng(frame);
@@ -4490,15 +4490,15 @@ i32 dispatch_syscall(TrapFrame& frame) {
 #endif
       }
       if (a0 == 0) {
-        write_text("MIKOS:STRESS_NG_PASS\n");
+        write_text("OSPLAY:STRESS_NG_PASS\n");
       }
-      write_text("MIKOS:PREEMPTIONS ");
+      write_text("OSPLAY:PREEMPTIONS ");
       write_u32(scheduler.user_preemptions);
       write_text("\n");
-      write_text("MIKOS:TIMER_CONTRACT_VIOLATIONS ");
+      write_text("OSPLAY:TIMER_CONTRACT_VIOLATIONS ");
       write_u32(scheduler.contract_violations);
       write_text("\n");
-      write_text("MIKOS:EXIT ");
+      write_text("OSPLAY:EXIT ");
       write_u32(a0);
       write_text("\n");
       shutdown(a0);
@@ -4528,7 +4528,7 @@ i32 dispatch_syscall(TrapFrame& frame) {
       if (a0 == 0) {
         return static_cast<i32>(process.brk);
       }
-#ifdef MIKOS_EXTREME_USERSPACE
+#ifdef OSPLAY_EXTREME_USERSPACE
       if (a0 >= process.mutable_begin && a0 <= process.mmap_begin) {
 #else
       if (a0 >= user_begin && a0 < process.mmap_cursor) {
@@ -4563,19 +4563,19 @@ i32 dispatch_syscall(TrapFrame& frame) {
     case Syscall::clock_gettime64:
       return clock_gettime(a1, true);
     case Syscall::clock_nanosleep64:
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
       return 0;
 #else
       return unknown(number);
 #endif
     case Syscall::ppoll64:
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
       return ppoll(frame, a0, a1, a2, true);
 #else
       return unknown(number);
 #endif
     case Syscall::pselect6_time64:
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
       return pselect6(frame, a0, a1, a2, a3, a4, true);
 #else
       return unknown(number);
@@ -4615,7 +4615,7 @@ i32 dispatch_syscall(TrapFrame& frame) {
       memset(reinterpret_cast<void*>(a1), 0, 72);
       return 0;
     case Syscall::prctl:
-#if defined(MIKOS_INTERACTIVE) || defined(MIKOS_EXTREME_USERSPACE)
+#if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
       return 0;
 #else
       return unknown(number);
@@ -4672,4 +4672,4 @@ i32 dispatch_syscall(TrapFrame& frame) {
   return unknown(number);
 }
 
-}  // namespace mikos
+}  // namespace osplay

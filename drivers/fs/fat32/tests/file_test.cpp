@@ -4,11 +4,11 @@
 
 namespace {
 
-using namespace mikos;
-using namespace mikos::drivers::fs;
-using namespace mikos::drivers::fs::fat32;
+using namespace osplay;
+using namespace osplay::drivers::fs;
+using namespace osplay::drivers::fs::fat32;
 
-void check_lookup_and_read(mikos::test::Suite& suite) {
+void check_lookup_and_read(osplay::test::Suite& suite) {
   fat32::test::Image image;
   constexpr char name[11] = {'P', 'A', 'Y', 'L', 'O', 'A', 'D', ' ',
                              'B', 'I', 'N'};
@@ -28,33 +28,33 @@ void check_lookup_and_read(mikos::test::Suite& suite) {
   image.write_cluster(8, 0, second, sizeof(second));
 
   auto mounted = Volume<fat32::test::Device>::mount(image.device);
-  MIKOS_CHECK(suite, mounted);
+  OSPLAY_CHECK(suite, mounted);
   const auto file = mounted->lookup_path("/payload.bin");
-  MIKOS_CHECK(suite, file);
+  OSPLAY_CHECK(suite, file);
   u8 output[256]{};
   const auto read = mounted->read((*file), 500, output,
                                        sizeof(output));
-  MIKOS_CHECK(suite, read);
-  MIKOS_CHECK(suite, (*read) == 200);
+  OSPLAY_CHECK(suite, read);
+  OSPLAY_CHECK(suite, (*read) == 200);
   for (u32 index = 0; index < 12; ++index) {
-    MIKOS_CHECK(suite, output[index] == first[500 + index]);
+    OSPLAY_CHECK(suite, output[index] == first[500 + index]);
   }
   for (u32 index = 12; index < 200; ++index) {
-    MIKOS_CHECK(suite, output[index] == second[index - 12]);
+    OSPLAY_CHECK(suite, output[index] == second[index - 12]);
   }
   const auto eof = mounted->read((*file), 700, output, 1);
-  MIKOS_CHECK(suite, eof);
-  MIKOS_CHECK(suite, (*eof) == 0);
+  OSPLAY_CHECK(suite, eof);
+  OSPLAY_CHECK(suite, (*eof) == 0);
 
   const auto directory_read =
       mounted->read(mounted->root(), 0, output, 1);
-  MIKOS_CHECK(suite, !directory_read);
+  OSPLAY_CHECK(suite, !directory_read);
 }
 
 }  // namespace
 
 int main() {
-  mikos::test::Suite suite{"drivers/fs/fat32/file"};
+  osplay::test::Suite suite{"drivers/fs/fat32/file"};
   check_lookup_and_read(suite);
   return suite.finish();
 }

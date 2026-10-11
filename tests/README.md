@@ -18,7 +18,7 @@ by the subsystem they exercise:
 - `regression/socket.md` and `regression/ioctl.md` list the implemented and
   target-level regression cases for each networking control syscall;
 - `busybox/` owns the external BusyBox/stress-ng compatibility workload and
-  the ext4 root image used by every MikOS target runner.
+  the ext4 root image used by every OSplay target runner.
 
 Any `kernel/*_test.cpp`, `drivers/*_test.cpp`, `fs/*_test.cpp`, or
 `net/*_test.cpp` or `network/*_test.cpp` file is automatically built as a separate regression binary

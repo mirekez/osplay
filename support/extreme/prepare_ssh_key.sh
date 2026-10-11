@@ -3,8 +3,8 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 base="${EXTREME_BUILD_ROOT:-$root/build/tests/extreme}"
-key="$root/build/mikos_ssh_key"
-output="$root/build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear"
+key="$root/build/osplay_ssh_key"
+output="$root/build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear"
 
 # These key-only targets do not build the RISC-V programs or require a toolchain.
 make --no-print-directory -s -C "$root/tests/busybox" "$key.pub"

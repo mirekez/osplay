@@ -4,11 +4,11 @@
 
 namespace {
 
-using namespace mikos;
-using namespace mikos::drivers::fs;
-using namespace mikos::drivers::fs::fat32;
+using namespace osplay;
+using namespace osplay::drivers::fs;
+using namespace osplay::drivers::fs::fat32;
 
-void check_names_and_paths(mikos::test::Suite& suite) {
+void check_names_and_paths(osplay::test::Suite& suite) {
   fat32::test::Image image;
   constexpr char short_file[11] = {'R', 'E', 'A', 'D', 'M', 'E', ' ',
                                    ' ', 'T', 'X', 'T'};
@@ -37,25 +37,25 @@ void check_names_and_paths(mikos::test::Suite& suite) {
   image.end_directory(6, 1);
 
   auto mounted = Volume<fat32::test::Device>::mount(image.device);
-  MIKOS_CHECK(suite, mounted);
+  OSPLAY_CHECK(suite, mounted);
   auto file = mounted->lookup_path("/readme.txt");
-  MIKOS_CHECK(suite, file);
-  MIKOS_CHECK(suite, file->first_cluster == 4);
+  OSPLAY_CHECK(suite, file);
+  OSPLAY_CHECK(suite, file->first_cluster == 4);
 
   file = mounted->lookup_path("/Long readable name.txt");
-  MIKOS_CHECK(suite, file);
-  MIKOS_CHECK(suite, file->first_cluster == 5);
+  OSPLAY_CHECK(suite, file);
+  OSPLAY_CHECK(suite, file->first_cluster == 5);
 
   file = mounted->lookup_path("SUBDIR/INNER.BIN");
-  MIKOS_CHECK(suite, file);
-  MIKOS_CHECK(suite, file->first_cluster == 7);
+  OSPLAY_CHECK(suite, file);
+  OSPLAY_CHECK(suite, file->first_cluster == 7);
 
   const auto missing = mounted->lookup_path("/missing");
-  MIKOS_CHECK(suite, !missing);
-  MIKOS_CHECK(suite, missing.error() == Error::not_found);
+  OSPLAY_CHECK(suite, !missing);
+  OSPLAY_CHECK(suite, missing.error() == Error::not_found);
 }
 
-void check_orphan_long_name_falls_back(mikos::test::Suite& suite) {
+void check_orphan_long_name_falls_back(osplay::test::Suite& suite) {
   fat32::test::Image image;
   constexpr char alias[11] = {'A', 'L', 'I', 'A', 'S', ' ', ' ', ' ',
                               'T', 'X', 'T'};
@@ -66,18 +66,18 @@ void check_orphan_long_name_falls_back(mikos::test::Suite& suite) {
   image.end_directory(2, 3);
 
   auto mounted = Volume<fat32::test::Device>::mount(image.device);
-  MIKOS_CHECK(suite, mounted);
+  OSPLAY_CHECK(suite, mounted);
   const auto alias_result = mounted->lookup_path("/alias.txt");
-  MIKOS_CHECK(suite, alias_result);
+  OSPLAY_CHECK(suite, alias_result);
   const auto long_result =
       mounted->lookup_path("/Broken long name");
-  MIKOS_CHECK(suite, !long_result);
+  OSPLAY_CHECK(suite, !long_result);
 }
 
 }  // namespace
 
 int main() {
-  mikos::test::Suite suite{"drivers/fs/fat32/directory"};
+  osplay::test::Suite suite{"drivers/fs/fat32/directory"};
   check_names_and_paths(suite);
   check_orphan_long_name_falls_back(suite);
   return suite.finish();

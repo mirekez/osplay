@@ -20,9 +20,9 @@ sysroot="${EXTREME_SYSROOT:-${RISCV_SYSROOT:-$HOME/riscv/sysroot}}"
 "${HOST_CXX:-g++}" -std=c++20 -O2 -Wall -Wextra -I "$root/include" \
   "$root/tests/extreme/net_peer.cpp" -o "$build/net_peer"
 for mode in boot kernel; do
-  defines=(-DMIKOS_EXTREME=1)
-  [[ "$mode" == boot ]] && defines+=(-DMIKOS_EXTREME_BOOT_ONLY=1)
-  ((multicore)) && defines+=(-DMIKOS_EXTREME_MULTICORE=1)
+  defines=(-DOSPLAY_EXTREME=1)
+  [[ "$mode" == boot ]] && defines+=(-DOSPLAY_EXTREME_BOOT_ONLY=1)
+  ((multicore)) && defines+=(-DOSPLAY_EXTREME_MULTICORE=1)
   sources=()
   if [[ "$mode" == kernel ]]; then
     for name in cxx_smoke cxx_arena cxx_runtime cxx_math; do
@@ -40,5 +40,5 @@ for mode in boot kernel; do
     -I "$cxx_root/inplace_vector-63569fe8502c3504d7d81bb6d378f3ec21fb1e95/include" \
     -I "$root" -I "$root/include" -I "$EXTREME_CPU_HOME" \
     --bits "$bits" --banks 2 --bank-words "$words" "${defines[@]}" \
-    -o "$build/mikos-$mode.ecx" --emit-ir "$build/mikos-$mode.ll"
+    -o "$build/osplay-$mode.ecx" --emit-ir "$build/osplay-$mode.ll"
 done

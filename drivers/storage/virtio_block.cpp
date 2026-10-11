@@ -1,7 +1,7 @@
 #include <drivers/net/virtio.hpp>
 #include <drivers/storage/virtio_block.hpp>
 
-namespace mikos::drivers::storage::virtio_block {
+namespace osplay::drivers::storage::virtio_block {
 namespace {
 
 using virtio::Feature;
@@ -237,4 +237,4 @@ bool write_sectors(u64 sector, const u8* input, u32 byte_count) {
 }
 bool flush() { return device.flush(); }
 
-}  // namespace mikos::drivers::storage::virtio_block
+}  // namespace osplay::drivers::storage::virtio_block

@@ -4,8 +4,8 @@ source "$(dirname "$0")/paths.sh"
 if [[ -z "${ROCKET_INTERACTIVE_TAP:-}${ROCKET_ETH_SOCKET:-}" ]]; then
   exec bash "$root/tests/network/start_tap.sh" "$@"
 fi
-tap="${ROCKET_INTERACTIVE_TAP:-${MIKOS_TAP:-tap-mikos}}"
-socket="${ROCKET_ETH_SOCKET:-${MIKOS_TAP_SOCKET:-/tmp/mikos-tap.sock}}"
+tap="${ROCKET_INTERACTIVE_TAP:-${OSPLAY_TAP:-tap-osplay}}"
+socket="${ROCKET_ETH_SOCKET:-${OSPLAY_TAP_SOCKET:-/tmp/osplay-tap.sock}}"
 bridge="$build/ethgig_tap"
 background=0
 [[ "${1:-}" != --background ]] || { background=1; shift; }

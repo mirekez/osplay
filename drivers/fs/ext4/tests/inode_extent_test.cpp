@@ -4,11 +4,11 @@
 
 namespace {
 
-using namespace mikos;
-using namespace mikos::drivers::fs;
-using namespace mikos::drivers::fs::ext4;
+using namespace osplay;
+using namespace osplay::drivers::fs;
+using namespace osplay::drivers::fs::ext4;
 
-void check_inline_root_extent(mikos::test::Suite& suite) {
+void check_inline_root_extent(osplay::test::Suite& suite) {
   ext4::test::Image image;
   image.extent_inode(3, 0x81a4, 1500, 11, 2);
   u8 first[1024]{};
@@ -23,22 +23,22 @@ void check_inline_root_extent(mikos::test::Suite& suite) {
   image.write_block(12, second, sizeof(second));
 
   auto mounted = Volume<ext4::test::Device>::mount(image.device);
-  MIKOS_CHECK(suite, mounted);
+  OSPLAY_CHECK(suite, mounted);
   const auto inode = mounted->read_inode(3);
-  MIKOS_CHECK(suite, inode);
+  OSPLAY_CHECK(suite, inode);
   u8 output[80]{};
   const auto read = mounted->read((*inode), 1000, output,
                                        sizeof(output));
-  MIKOS_CHECK(suite, read);
+  OSPLAY_CHECK(suite, read);
   for (u32 index = 0; index < 24; ++index) {
-    MIKOS_CHECK(suite, output[index] == first[1000 + index]);
+    OSPLAY_CHECK(suite, output[index] == first[1000 + index]);
   }
   for (u32 index = 24; index < sizeof(output); ++index) {
-    MIKOS_CHECK(suite, output[index] == second[index - 24]);
+    OSPLAY_CHECK(suite, output[index] == second[index - 24]);
   }
 }
 
-void check_external_and_legacy(mikos::test::Suite& suite) {
+void check_external_and_legacy(osplay::test::Suite& suite) {
   ext4::test::Image image;
   image.external_extent_inode(3, 0x81a4, 16, 20, 21);
   constexpr u8 external[] = "external extent";
@@ -50,22 +50,22 @@ void check_external_and_legacy(mikos::test::Suite& suite) {
   image.write_block(24, indirect, sizeof(indirect));
 
   auto mounted = Volume<ext4::test::Device>::mount(image.device);
-  MIKOS_CHECK(suite, mounted);
+  OSPLAY_CHECK(suite, mounted);
   auto inode = mounted->read_inode(3);
   u8 output[32]{};
   auto read = mounted->read((*inode), 0, output, 15);
-  MIKOS_CHECK(suite, read);
-  MIKOS_CHECK(suite, output[0] == 'e');
-  MIKOS_CHECK(suite, output[14] == 't');
+  OSPLAY_CHECK(suite, read);
+  OSPLAY_CHECK(suite, output[0] == 'e');
+  OSPLAY_CHECK(suite, output[14] == 't');
 
   inode = mounted->read_inode(4);
   read = mounted->read((*inode), 12 * 1024, output, 8);
-  MIKOS_CHECK(suite, read);
-  MIKOS_CHECK(suite, output[0] == 'i');
-  MIKOS_CHECK(suite, output[7] == 't');
+  OSPLAY_CHECK(suite, read);
+  OSPLAY_CHECK(suite, output[0] == 'i');
+  OSPLAY_CHECK(suite, output[7] == 't');
 }
 
-void check_uninitialized_extent(mikos::test::Suite& suite) {
+void check_uninitialized_extent(osplay::test::Suite& suite) {
   ext4::test::Image image;
   image.extent_inode(3, 0x81a4, 32, 11, 1, 0, true);
   auto mounted = Volume<ext4::test::Device>::mount(image.device);
@@ -76,16 +76,16 @@ void check_uninitialized_extent(mikos::test::Suite& suite) {
   }
   const auto read =
       mounted->read((*inode), 0, output, sizeof(output));
-  MIKOS_CHECK(suite, read);
+  OSPLAY_CHECK(suite, read);
   for (auto byte : output) {
-    MIKOS_CHECK(suite, byte == 0);
+    OSPLAY_CHECK(suite, byte == 0);
   }
 }
 
 }  // namespace
 
 int main() {
-  mikos::test::Suite suite{"drivers/fs/ext4/inode_extent"};
+  osplay::test::Suite suite{"drivers/fs/ext4/inode_extent"};
   check_inline_root_extent(suite);
   check_external_and_legacy(suite);
   check_uninitialized_extent(suite);

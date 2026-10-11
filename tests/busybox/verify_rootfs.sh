@@ -39,5 +39,5 @@ startup="$($debugfs -R 'cat /etc/init.d/rcS' "$image" 2>/dev/null)"
 grep -E -q '^/usr/sbin/dropbear -s -F \\$' <<<"$startup"
 grep -E -q '^  -r /etc/dropbear/dropbear_ed25519_host_key -p 22 &$' \
   <<<"$startup"
-grep -E -q '^echo "MIKOS_SSH_STARTING 192.168.76.2:22 pid=\$!"$' \
+grep -E -q '^echo "OSPLAY_SSH_STARTING 192.168.76.2:22 pid=\$!"$' \
   <<<"$startup"

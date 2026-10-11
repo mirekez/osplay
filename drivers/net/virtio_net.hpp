@@ -3,10 +3,10 @@
 #include <drivers/net/net.hpp>
 #include <drivers/net/virtio.hpp>
 
-extern "C" void* memcpy(void*, const void*, mikos::usize);
-extern "C" void* memset(void*, int, mikos::usize);
+extern "C" void* memcpy(void*, const void*, osplay::usize);
+extern "C" void* memset(void*, int, osplay::usize);
 
-namespace mikos::drivers::virtio {
+namespace osplay::drivers::virtio {
 
 template <typename Transport, typename Queue>
 concept NetTransport = requires(Transport transport, const Queue& queue,
@@ -100,4 +100,4 @@ class BasicNetDevice {
   MacAddress mac_{};
 };
 
-}  // namespace mikos::drivers::virtio
+}  // namespace osplay::drivers::virtio

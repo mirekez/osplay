@@ -1,8 +1,8 @@
 #pragma once
 
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 
-namespace mikos::drivers::tribe_sd {
+namespace osplay::drivers::tribe_sd {
 
 inline constexpr u32 block_size = 512;
 
@@ -14,4 +14,4 @@ inline constexpr u32 block_size = 512;
 [[nodiscard]] bool write_blocks(u32 block, const u8* data, u32 byte_count);
 [[nodiscard]] bool flush();
 
-}  // namespace mikos::drivers::tribe_sd
+}  // namespace osplay::drivers::tribe_sd

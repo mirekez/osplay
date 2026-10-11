@@ -4,16 +4,16 @@
 #include <drivers/uart/uart.hpp>
 #include <kernel/arch/extreme/platform.hpp>
 #include <kernel/arch/extreme/userspace.hpp>
-#include <mikos/arch.hpp>
-#include <mikos/kernel.hpp>
+#include <osplay/arch.hpp>
+#include <osplay/kernel.hpp>
 
-extern "C" void *memcpy(void *, const void *, mikos::usize);
-extern "C" void *memset(void *, int, mikos::usize);
+extern "C" void *memcpy(void *, const void *, osplay::usize);
+extern "C" void *memset(void *, int, osplay::usize);
 extern "C" unsigned __extreme_user_layout(unsigned);
 extern "C" unsigned __extreme_activation_size(void (*)());
 extern "C" unsigned __extreme_activation_end();
 
-namespace mikos {
+namespace osplay {
 Process process{};
 Scheduler scheduler{};
 u32 user_stack_top{};
@@ -160,19 +160,19 @@ bool replace_with_executable(TrapFrame &frame, const char *path, const char *con
   frame.extreme_start = true;
   return true;
 }
-} // namespace mikos
+} // namespace osplay
 
 extern "C" const ExtremeApplication *extreme_application() {
-  return &mikos::extreme_platform::launch;
+  return &osplay::extreme_platform::launch;
 }
-extern "C" unsigned char *extreme_snapshot_begin() { return mikos::extreme_platform::snapshots; }
+extern "C" unsigned char *extreme_snapshot_begin() { return osplay::extreme_platform::snapshots; }
 extern "C" unsigned char *extreme_snapshot_end() {
-  return mikos::extreme_platform::snapshots + sizeof(mikos::extreme_platform::snapshots);
+  return osplay::extreme_platform::snapshots + sizeof(osplay::extreme_platform::snapshots);
 }
 extern "C" long __extreme_syscall(long number, long a, long b, long c, long d, long e, long f) {
-  using namespace mikos::extreme_platform;
+  using namespace osplay::extreme_platform;
   do {
-    mikos::user_stack_top = __extreme_activation_end();
+    osplay::user_stack_top = __extreme_activation_end();
     active_frame.x[17] = number;
     active_frame.x[10] = a;
     active_frame.x[11] = b;
@@ -195,23 +195,23 @@ extern "C" long __extreme_syscall(long number, long a, long b, long c, long d, l
   }
   return static_cast<long>(active_frame.x[10]);
 }
-namespace mikos::arch {
+namespace osplay::arch {
 void start_scheduler_timer() {}
 void rearm_scheduler_timer() {}
 void set_network_timer_waiting(bool) {}
 u64 time_ticks() { return extreme_platform::read(::extreme::devices::timer); }
-} // namespace mikos::arch
+} // namespace osplay::arch
 extern "C" unsigned kernel() {
-  using namespace mikos;
-  using namespace mikos::extreme_platform;
+  using namespace osplay;
+  using namespace osplay::extreme_platform;
   if (__extreme_context_save(&boot_context)) {
     return exit_status;
   }
   if (!drivers::uart::initialize()) {
     return 1;
   }
-  mikos::write_text("MIKOS:BOOT\nMIKOS:EXTREME_USERSPACE\nMIKOS:UART_READY\n");
-  mikos::write_text("MIKOS:MEMORY_INIT checking userspace layout\n");
+  osplay::write_text("OSPLAY:BOOT\nOSPLAY:EXTREME_USERSPACE\nOSPLAY:UART_READY\n");
+  osplay::write_text("OSPLAY:MEMORY_INIT checking userspace layout\n");
   // Taking the address keeps the reserved heap in the linked image.
   heap[0] = 0;
   data_begin = __extreme_user_layout(0);
@@ -219,40 +219,40 @@ extern "C" unsigned kernel() {
   user_heap_end = __extreme_user_layout(2);
   unsigned user_required = __extreme_activation_size(extreme_application_entry);
   unsigned kernel_required = __extreme_activation_size(dispatch);
-  mikos::write_text("MIKOS:ACTIVATION user=");
+  osplay::write_text("OSPLAY:ACTIVATION user=");
   write_u32(user_required);
-  mikos::write_text(" kernel=");
+  osplay::write_text(" kernel=");
   write_u32(kernel_required);
-  mikos::write_text("\n");
+  osplay::write_text("\n");
   if (data_end - data_begin > sizeof(initial_data) || user_required > activation_capacity ||
       kernel_required > sizeof(kernel_activation)) {
-    mikos::write_text("MIKOS:MEMORY_FAIL activation or initial data exceeds capacity\n");
+    osplay::write_text("OSPLAY:MEMORY_FAIL activation or initial data exceeds capacity\n");
     shutdown(11);
   }
-  mikos::write_text("MIKOS:MEMORY_INIT saving initial userspace data\n");
+  osplay::write_text("OSPLAY:MEMORY_INIT saving initial userspace data\n");
   memcpy(initial_data, reinterpret_cast<const void *>(data_begin), data_end - data_begin);
   user_stack_top = reinterpret_cast<u32>(user_activation) + sizeof(user_activation);
-  mikos::write_text("MIKOS:MEMORY_READY\nMIKOS:ROOTFS_INIT mounting root filesystem\n");
+  osplay::write_text("OSPLAY:MEMORY_READY\nOSPLAY:ROOTFS_INIT mounting root filesystem\n");
   if (!drivers::fs::root::initialize()) {
-    mikos::write_text("MIKOS:ROOTFS_FAIL\n");
+    osplay::write_text("OSPLAY:ROOTFS_FAIL\n");
     shutdown(12);
   }
-  mikos::write_text("MIKOS:ROOTFS_READY\nMIKOS:NETWORK_INIT\n");
+  osplay::write_text("OSPLAY:ROOTFS_READY\nOSPLAY:NETWORK_INIT\n");
   if (!network::initialize()) {
-    mikos::write_text("MIKOS:NETWORK_FAIL\n");
+    osplay::write_text("OSPLAY:NETWORK_FAIL\n");
     shutdown(13);
   }
-  mikos::write_text("MIKOS:NETWORK_READY\nMIKOS:INIT loading /bin/sh /etc/init.d/rcS\n");
+  osplay::write_text("OSPLAY:NETWORK_READY\nOSPLAY:INIT loading /bin/sh /etc/init.d/rcS\n");
   process.pid = process.process_group = process.session = 1;
   process.current_directory[0] = '/';
   const char *args[] = {"/bin/sh", "/etc/init.d/rcS"};
   const char *environment[] = {"PATH=/bin:/usr/bin:/sbin:/usr/sbin", "HOME=/root", "TERM=vt100",
                                "PS1=/ # "};
   if (!replace_with_executable(active_frame, "/bin/sh", args, 2, environment, 4)) {
-    mikos::write_text("MIKOS:INIT_FAIL cannot load /bin/sh\n");
+    osplay::write_text("OSPLAY:INIT_FAIL cannot load /bin/sh\n");
     shutdown(14);
   }
   active_frame.extreme_start = false;
-  mikos::write_text("MIKOS:INIT_READY entering userspace\n");
+  osplay::write_text("OSPLAY:INIT_READY entering userspace\n");
   __extreme_context_enter(extreme_application_entry, user_activation);
 }

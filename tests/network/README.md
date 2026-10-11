@@ -142,7 +142,7 @@ payload; unsuccessful/partial writes leave the remainder with the caller.
 
 ## Scope and completion record
 
-The acceptance target is mikOS's bounded, passive-open IPv4 TCP transport used
+The acceptance target is OSplay's bounded, passive-open IPv4 TCP transport used
 by BusyBox `nc` and Dropbear. This is not a claim of complete Internet TCP or a
 replacement for NIC/simulator integration tests. Active-open `connect`, IP
 fragment reassembly, SACK, timestamps/PAWS, and configurable keepalive are not

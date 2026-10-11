@@ -1,7 +1,7 @@
 #include <drivers/storage/tribe_sd.hpp>
 #include <drivers/storage/tribe_sd_dma.hpp>
 
-namespace mikos::drivers::tribe_sd {
+namespace osplay::drivers::tribe_sd {
 namespace {
 
 inline constexpr u32 base = 0x8200d100;
@@ -107,4 +107,4 @@ bool flush() {
   return true;
 }
 
-}  // namespace mikos::drivers::tribe_sd
+}  // namespace osplay::drivers::tribe_sd

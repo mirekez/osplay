@@ -4,12 +4,12 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 multicore=()
 simulator_backend=()
-tap="${TRIBE_INTERACTIVE_TAP:-${MIKOS_TAP:-$(python3 "$root/tests/network/tap.py" --select-tap)}}"
+tap="${TRIBE_INTERACTIVE_TAP:-${OSPLAY_TAP:-$(python3 "$root/tests/network/tap.py" --select-tap)}}"
 guest_address="${TRIBE_INTERACTIVE_GUEST_ADDRESS:-192.168.76.2}"
 host_address="${TRIBE_INTERACTIVE_HOST_ADDRESS:-192.168.76.1}"
 guest_port="${TRIBE_INTERACTIVE_SSH_PORT:-22}"
 wall_timeout="${TRIBE_INTERACTIVE_SSH_TIMEOUT:-3600}"
-dropbear_identity="${TRIBE_INTERACTIVE_DROPBEAR_IDENTITY:-$root/build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear}"
+dropbear_identity="${TRIBE_INTERACTIVE_DROPBEAR_IDENTITY:-$root/build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear}"
 early_client="${TRIBE_INTERACTIVE_SSH_EARLY_CLIENT:-0}"
 late_diagnostics="${TRIBE_INTERACTIVE_SSH_DIAGNOSTICS:-0}"
 uart_preempt_probe="${TRIBE_INTERACTIVE_SSH_UART_PREEMPT_PROBE:-0}"
@@ -24,9 +24,9 @@ if [[ "$quiet" != 0 && "$quiet" != 1 ]]; then
   exit 2
 fi
 
-if [[ "${MIKOS_TRIBE_SSH_NETNS_ENTERED:-0}" != 1 &&
-      -z "${TRIBE_ETH_TAP_SOCKET:-}${MIKOS_TAP_SOCKET:-}" ]]; then
-  exec unshare -Urn env MIKOS_TRIBE_SSH_NETNS_ENTERED=1 "$0" "$@"
+if [[ "${OSPLAY_TRIBE_SSH_NETNS_ENTERED:-0}" != 1 &&
+      -z "${TRIBE_ETH_TAP_SOCKET:-}${OSPLAY_TAP_SOCKET:-}" ]]; then
+  exec unshare -Urn env OSPLAY_TRIBE_SSH_NETNS_ENTERED=1 "$0" "$@"
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -65,13 +65,13 @@ for required in "$dropbear_identity" \
   fi
 done
 
-runtime="$(mktemp -d /tmp/mikos-interactive-ssh.XXXXXX)"
+runtime="$(mktemp -d /tmp/osplay-interactive-ssh.XXXXXX)"
 input="$runtime/uart.in"
 log="$runtime/uart.log"
 ssh_log="$runtime/ssh.log"
 bridge_log="$runtime/bridge.log"
 rootfs="$runtime/rootfs.ext4"
-tap_socket="${TRIBE_ETH_TAP_SOCKET:-${MIKOS_TAP_SOCKET:-$runtime/tribe-ethgig.sock}}"
+tap_socket="${TRIBE_ETH_TAP_SOCKET:-${OSPLAY_TAP_SOCKET:-$runtime/tribe-ethgig.sock}}"
 cp --reflink=auto "$root/build/tests/busybox/rootfs.ext4" "$rootfs"
 mkfifo "$input"
 exec 3<>"$input"
@@ -113,7 +113,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ ! -S "$tap_socket" ]]; then
-  MIKOS_ETH_TAP_PCAP="$pcap" \
+  OSPLAY_ETH_TAP_PCAP="$pcap" \
     "$root/build/tests/qemu/ethgig_tap" --tap "$tap" \
     --address "$host_address/24" --socket "$tap_socket" \
     >"$bridge_log" 2>&1 &
@@ -297,7 +297,7 @@ finish_ssh_client() {
   if [[ -z "$remote_marker" ]]; then
     marker_seen=1
   fi
-  wait_for_log_count 'MIKOS:TCP_ACCEPT fd=' "$accept_count"
+  wait_for_log_count 'OSPLAY:TCP_ACCEPT fd=' "$accept_count"
   local deadline=$((SECONDS + wall_timeout))
   while ((SECONDS < deadline)); do
     # A remote PTY applies ONLCR, and util-linux script's local PTY can apply
@@ -310,7 +310,7 @@ finish_ssh_client() {
     # A nested command must restore the login shell's real PPID. A zero PPID
     # makes the PTY scheduler reject every subsequent wakeup, so fail at the
     # first corrupt park instead of consuming the full native-C++ timeout.
-    if grep -E -q '^MIKOS:PTY_CHILD_PARK child=[1-9][0-9]* parent=0([[:space:]]|$)' \
+    if grep -E -q '^OSPLAY:PTY_CHILD_PARK child=[1-9][0-9]* parent=0([[:space:]]|$)' \
         "$log" 2>/dev/null; then
       sed -n '1,520p' "$log" >&2
       sed -n '1,240p' "$ssh_log" >&2
@@ -354,10 +354,10 @@ exercise_interactive_shell() {
   # Wait until dbclient has switched its local pseudo-terminal to raw mode and
   # the remote shell is blocked at its first prompt. VINTR sent earlier is
   # consumed by the local `script` PTY and merely echoed as ^C.
-  wait_for_log 'MIKOS:PTY_CHILD_PARK child=[1-9][0-9]* parent=[1-9][0-9]*'
-  park_count="$(grep -E -c 'MIKOS:PTY_CHILD_PARK child=' "$log" 2>/dev/null || true)"
-  resume_count="$(grep -E -c 'MIKOS:PTY_CHILD_RESUME child=' "$log" 2>/dev/null || true)"
-  child_exit_count="$(grep -E -c 'MIKOS:CHILD_EXIT pid=[1-9][0-9]* status=0' \
+  wait_for_log 'OSPLAY:PTY_CHILD_PARK child=[1-9][0-9]* parent=[1-9][0-9]*'
+  park_count="$(grep -E -c 'OSPLAY:PTY_CHILD_PARK child=' "$log" 2>/dev/null || true)"
+  resume_count="$(grep -E -c 'OSPLAY:PTY_CHILD_RESUME child=' "$log" 2>/dev/null || true)"
+  child_exit_count="$(grep -E -c 'OSPLAY:CHILD_EXIT pid=[1-9][0-9]* status=0' \
     "$log" 2>/dev/null || true)"
 
   # BusyBox's interactive line editor may put the slave in raw mode. In that
@@ -365,27 +365,27 @@ exercise_interactive_shell() {
   # in cooked mode the PTY model generates SIGINT. Either way, Ctrl-C must
   # wake the parked shell and return it to a fresh prompt wait.
   printf '\003' >&"$ssh_input_fd"
-  wait_for_log_count 'MIKOS:PTY_CHILD_RESUME child=' "$((resume_count + 1))"
-  wait_for_log_count 'MIKOS:PTY_CHILD_PARK child=' "$((park_count + 1))"
+  wait_for_log_count 'OSPLAY:PTY_CHILD_RESUME child=' "$((resume_count + 1))"
+  wait_for_log_count 'OSPLAY:PTY_CHILD_PARK child=' "$((park_count + 1))"
 
   # Batch the foreground-app command behind ls. util-linux script can split a
   # command typed after a fresh prompt into one-byte SSH channel packets; each
   # byte would force a multi-minute Dropbear/BusyBox image swap in native C++.
   # BusyBox consumes this batch one line at a time, so top still starts only
   # after ls exits and exercises the identical nested PTY-blocking state.
-  relay_count="$(grep -E -c 'MIKOS:PTY_CHILD_RELAY child=' "$log" 2>/dev/null || true)"
+  relay_count="$(grep -E -c 'OSPLAY:PTY_CHILD_RELAY child=' "$log" 2>/dev/null || true)"
   printf '%s\n' \
     'printf '\''%s\n'\'' "$SSH_TTY"' \
     'ls /' \
     'top' >&"$ssh_input_fd"
-  wait_for_log 'MIKOS:NESTED_CLONE_STACK depth=3'
-  wait_for_log 'MIKOS:EXEC pid=[1-9][0-9]* path=/bin/(ls|sh).*argv0=ls'
-  wait_for_log_count 'MIKOS:CHILD_EXIT pid=[1-9][0-9]* status=0' \
+  wait_for_log 'OSPLAY:NESTED_CLONE_STACK depth=3'
+  wait_for_log 'OSPLAY:EXEC pid=[1-9][0-9]* path=/bin/(ls|sh).*argv0=ls'
+  wait_for_log_count 'OSPLAY:CHILD_EXIT pid=[1-9][0-9]* status=0' \
     "$((child_exit_count + 1))"
-  wait_for_log 'MIKOS:EXEC pid=[1-9][0-9]* path=/bin/(top|sh).*argv0=top'
-  wait_for_log_count 'MIKOS:PTY_CHILD_RELAY child=' "$((relay_count + 1))"
-  wait_for_log_count 'MIKOS:PTY_CHILD_PARK child=' "$((park_count + 2))"
-  if grep -E -q '^MIKOS:PTY_CHILD_PARK child=[1-9][0-9]* parent=0([[:space:]]|$)' \
+  wait_for_log 'OSPLAY:EXEC pid=[1-9][0-9]* path=/bin/(top|sh).*argv0=top'
+  wait_for_log_count 'OSPLAY:PTY_CHILD_RELAY child=' "$((relay_count + 1))"
+  wait_for_log_count 'OSPLAY:PTY_CHILD_PARK child=' "$((park_count + 2))"
+  if grep -E -q '^OSPLAY:PTY_CHILD_PARK child=[1-9][0-9]* parent=0([[:space:]]|$)' \
       "$log"; then
     echo "FAIL: nested command restored the SSH shell with PPID 0" >&2
     return 1
@@ -396,21 +396,21 @@ exercise_interactive_shell() {
   # the same ancestry when input arrives. Exercise two top wakeups, its clean
   # exit, and the restored shell's next prompt so a one-way handoff cannot
   # pass.
-  park_count="$(grep -E -c 'MIKOS:PTY_CHILD_PARK child=' "$log" 2>/dev/null || true)"
-  resume_count="$(grep -E -c 'MIKOS:PTY_CHILD_RESUME child=' "$log" 2>/dev/null || true)"
-  child_exit_count="$(grep -E -c 'MIKOS:CHILD_EXIT pid=[1-9][0-9]* status=0' \
+  park_count="$(grep -E -c 'OSPLAY:PTY_CHILD_PARK child=' "$log" 2>/dev/null || true)"
+  resume_count="$(grep -E -c 'OSPLAY:PTY_CHILD_RESUME child=' "$log" 2>/dev/null || true)"
+  child_exit_count="$(grep -E -c 'OSPLAY:CHILD_EXIT pid=[1-9][0-9]* status=0' \
     "$log" 2>/dev/null || true)"
-  relay_count="$(grep -E -c 'MIKOS:PTY_CHILD_RELAY child=' "$log" 2>/dev/null || true)"
+  relay_count="$(grep -E -c 'OSPLAY:PTY_CHILD_RELAY child=' "$log" 2>/dev/null || true)"
   printf '1' >&"$ssh_input_fd"
-  wait_for_log_count 'MIKOS:PTY_CHILD_RESUME child=' "$((resume_count + 1))"
-  wait_for_log_count 'MIKOS:PTY_CHILD_RELAY child=' "$((relay_count + 1))"
-  wait_for_log_count 'MIKOS:PTY_CHILD_PARK child=' "$((park_count + 1))"
+  wait_for_log_count 'OSPLAY:PTY_CHILD_RESUME child=' "$((resume_count + 1))"
+  wait_for_log_count 'OSPLAY:PTY_CHILD_RELAY child=' "$((relay_count + 1))"
+  wait_for_log_count 'OSPLAY:PTY_CHILD_PARK child=' "$((park_count + 1))"
   wait_for_ssh_log 'Mem:'
   printf 'q' >&"$ssh_input_fd"
-  wait_for_log_count 'MIKOS:PTY_CHILD_RESUME child=' "$((resume_count + 2))"
-  wait_for_log_count 'MIKOS:CHILD_EXIT pid=[1-9][0-9]* status=0' \
+  wait_for_log_count 'OSPLAY:PTY_CHILD_RESUME child=' "$((resume_count + 2))"
+  wait_for_log_count 'OSPLAY:CHILD_EXIT pid=[1-9][0-9]* status=0' \
     "$((child_exit_count + 1))"
-  wait_for_log_count 'MIKOS:PTY_CHILD_PARK child=' "$((park_count + 2))"
+  wait_for_log_count 'OSPLAY:PTY_CHILD_PARK child=' "$((park_count + 2))"
 
   # EOF at an empty interactive prompt is a one-byte clean logout. A longer
   # `exit\n` transcript can be split by dbclient into character-sized SSH
@@ -418,11 +418,11 @@ exercise_interactive_shell() {
   printf '\004' >&"$ssh_input_fd"
 }
 
-wait_for_log "MIKOS:TCP_LISTEN $guest_port"
+wait_for_log "OSPLAY:TCP_LISTEN $guest_port"
 if [[ "$early_client" == 1 ]]; then
-  start_ssh_client MIKOS_SSH_AUTH_OK_1 "$pty_only" "$pty_only"
+  start_ssh_client OSPLAY_SSH_AUTH_OK_1 "$pty_only" "$pty_only"
 else
-  wait_for_log 'MIKOS_SSH_STARTING 192\.168\.76\.2:22 pid='
+  wait_for_log 'OSPLAY_SSH_STARTING 192\.168\.76\.2:22 pid='
   wait_for_log '/ # '
   if [[ "$late_diagnostics" == 1 ]]; then
     printf 'ps\n' >&3
@@ -432,21 +432,21 @@ else
     printf 'netstat -ln\n' >&3
     wait_for_log '^tcp[[:space:]]+0[[:space:]]+0[[:space:]]+0\.0\.0\.0:22[[:space:]]+0\.0\.0\.0:\*[[:space:]]+LISTEN'
   fi
-  start_ssh_client MIKOS_SSH_AUTH_OK_1 "$pty_only" "$pty_only"
+  start_ssh_client OSPLAY_SSH_AUTH_OK_1 "$pty_only" "$pty_only"
 fi
 
-wait_for_log 'MIKOS:TCP_ACCEPT fd='
-wait_for_log 'MIKOS:TCP_WRITE 26'
-wait_for_log 'MIKOS:TCP_READ '
+wait_for_log 'OSPLAY:TCP_ACCEPT fd='
+wait_for_log 'OSPLAY:TCP_WRITE 26'
+wait_for_log 'OSPLAY:TCP_READ '
 # The early-client diagnostic may accept before the first park. Capture the
 # count while the first session is active so its next park is unambiguous.
-initial_park_count="$(grep -E -c 'MIKOS:BACKGROUND_PARK 2[[:space:]]*$' "$log" || true)"
+initial_park_count="$(grep -E -c 'OSPLAY:BACKGROUND_PARK 2[[:space:]]*$' "$log" || true)"
 if [[ "$uart_preempt_probe" == 1 ]]; then
   # Stop the peer before the KEX reply, then leave UART input pending. This
   # forces the nested SSH child into BACKGROUND_CONNECTION_HOLD with no network
   # data available. It must ignore UART rather than park and incorrectly resume
   # the listener from the stacked ancestry.
-  wait_for_log 'MIKOS_DROPBEAR_X25519_COMBINE_DONE'
+  wait_for_log 'OSPLAY_DROPBEAR_X25519_COMBINE_DONE'
   connection_pid="$(sed -n \
     's/^\[\([0-9][0-9]*\)\].*Child connection from.*/\1/p' "$log" | tail -1)"
   if [[ -z "$connection_pid" ]]; then
@@ -455,8 +455,8 @@ if [[ "$uart_preempt_probe" == 1 ]]; then
   fi
   kill -STOP "$ssh_pause_target"
   printf '\n' >&3
-  wait_for_log "MIKOS:BACKGROUND_CONNECTION_HOLD $connection_pid"
-  if grep -E -q "MIKOS:BACKGROUND_PARK $connection_pid|MIKOS:BACKGROUND_PARK_NO_PARENT" "$log"; then
+  wait_for_log "OSPLAY:BACKGROUND_CONNECTION_HOLD $connection_pid"
+  if grep -E -q "OSPLAY:BACKGROUND_PARK $connection_pid|OSPLAY:BACKGROUND_PARK_NO_PARENT" "$log"; then
     echo "FAIL: nested SSH child yielded to UART while holding a live connection" >&2
     exit 1
   fi
@@ -468,7 +468,7 @@ if [[ "$pty_only" == 1 ]]; then
   exercise_interactive_shell
   finish_ssh_client '' 1
 else
-  finish_ssh_client MIKOS_SSH_AUTH_OK_1 1
+  finish_ssh_client OSPLAY_SSH_AUTH_OK_1 1
 fi
 if [[ "$pty_only" == 1 ]]; then
   if ! grep -E -q $'^/dev/pts/[0-3]\r*$' "$ssh_log"; then
@@ -489,14 +489,14 @@ fi
 # Reconnect during that masked-interrupt image restore, when a host SYN used
 # to go unanswered until the host connect timeout expired. Do not wait for
 # BUSYBOX_ENTRY: that would hide the network starvation regression.
-wait_for_log_count 'MIKOS:BACKGROUND_PARK 2[[:space:]]*$' "$((initial_park_count + 1))"
+wait_for_log_count 'OSPLAY:BACKGROUND_PARK 2[[:space:]]*$' "$((initial_park_count + 1))"
 if [[ "$reconnect_only" == 1 ]]; then
-  start_ssh_client MIKOS_SSH_AUTH_OK_2
-  finish_ssh_client MIKOS_SSH_AUTH_OK_2 2
+  start_ssh_client OSPLAY_SSH_AUTH_OK_2
+  finish_ssh_client OSPLAY_SSH_AUTH_OK_2 2
   echo "PASS: authenticated SSH commands completed before and after reconnecting during BusyBox restoration"
   exit 0
 fi
-start_ssh_client MIKOS_SSH_AUTH_OK_2 1 1
+start_ssh_client OSPLAY_SSH_AUTH_OK_2 1 1
 exercise_interactive_shell
 finish_ssh_client '' 2
 if ! grep -E -q $'^/dev/pts/[0-3]\r*$' "$ssh_log"; then

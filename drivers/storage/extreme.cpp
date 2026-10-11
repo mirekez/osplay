@@ -1,7 +1,7 @@
 #include <drivers/storage/root_device.hpp>
 #include <kernel/arch/extreme/userspace.hpp>
-extern "C" void *memcpy(void *, const void *, mikos::usize);
-namespace mikos::drivers::storage::root_device {
+extern "C" void *memcpy(void *, const void *, osplay::usize);
+namespace osplay::drivers::storage::root_device {
 bool Device::initialize() { return true; }
 u64 Device::sector_count() const { return extreme_platform::root_disk_bytes / sector_size; }
 bool Device::read_sector(u64 sector, u8 *output) {
@@ -27,4 +27,4 @@ bool Device::write_sectors(u64 sector, const u8 *input, u32 count) {
   return true;
 }
 bool Device::flush() { return true; }
-} // namespace mikos::drivers::storage::root_device
+} // namespace osplay::drivers::storage::root_device

@@ -10,7 +10,7 @@
 #include <iostream>
 #include <vector>
 
-#include <mikos/net/ethernet.hpp>
+#include <osplay/net/ethernet.hpp>
 
 namespace {
 
@@ -88,25 +88,25 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  const mikos::MacAddress peer_mac{{0x02, 0x00, 0x00, 0x00, 0x00, 0x01}};
-  const mikos::MacAddress guest_mac{{0x02, 0x00, 0x00, 0x00, 0x00, 0x02}};
-  const mikos::Ipv4Address peer_ip{{192, 168, 76, 1}};
-  const mikos::Ipv4Address guest_ip{{192, 168, 76, 2}};
+  const osplay::MacAddress peer_mac{{0x02, 0x00, 0x00, 0x00, 0x00, 0x01}};
+  const osplay::MacAddress guest_mac{{0x02, 0x00, 0x00, 0x00, 0x00, 0x02}};
+  const osplay::Ipv4Address peer_ip{{192, 168, 76, 1}};
+  const osplay::Ipv4Address guest_ip{{192, 168, 76, 2}};
 
-  mikos::ArpIpv4 arp{};
+  osplay::ArpIpv4 arp{};
   for (auto& octet : arp.ethernet.destination) {
     octet = 0xff;
   }
-  mikos::copy_octets(arp.ethernet.source, peer_mac.octet);
-  arp.ethernet.type = mikos::net16(0x0806);
-  arp.hardware_type = mikos::net16(1);
-  arp.protocol_type = mikos::net16(0x0800);
+  osplay::copy_octets(arp.ethernet.source, peer_mac.octet);
+  arp.ethernet.type = osplay::net16(0x0806);
+  arp.hardware_type = osplay::net16(1);
+  arp.protocol_type = osplay::net16(0x0800);
   arp.hardware_size = 6;
   arp.protocol_size = 4;
-  arp.operation = mikos::net16(1);
-  mikos::copy_octets(arp.sender_mac, peer_mac.octet);
-  mikos::copy_octets(arp.sender_ip, peer_ip.octet);
-  mikos::copy_octets(arp.target_ip, guest_ip.octet);
+  arp.operation = osplay::net16(1);
+  osplay::copy_octets(arp.sender_mac, peer_mac.octet);
+  osplay::copy_octets(arp.sender_ip, peer_ip.octet);
+  osplay::copy_octets(arp.target_ip, guest_ip.octet);
   std::vector<std::uint8_t> received;
   bool arp_ok = false;
   for (unsigned attempt = 0; attempt < 480 && !arp_ok; ++attempt) {
@@ -118,8 +118,8 @@ int main(int argc, char** argv) {
       continue;
     }
     const auto& reply =
-        *reinterpret_cast<const mikos::ArpIpv4*>(received.data());
-    arp_ok = reply.operation == mikos::net16(2) &&
+        *reinterpret_cast<const osplay::ArpIpv4*>(received.data());
+    arp_ok = reply.operation == osplay::net16(2) &&
              std::memcmp(reply.sender_mac, guest_mac.octet, 6) == 0 &&
              std::memcmp(reply.sender_ip, guest_ip.octet, 4) == 0;
   }
@@ -129,37 +129,37 @@ int main(int argc, char** argv) {
   }
 
   struct [[gnu::packed]] EchoPacket {
-    mikos::EthernetHeader ethernet;
-    mikos::Ipv4Header ip;
-    mikos::IcmpEchoHeader icmp;
+    osplay::EthernetHeader ethernet;
+    osplay::Ipv4Header ip;
+    osplay::IcmpEchoHeader icmp;
     // Exceed the former 256-byte MAC buffer to exercise full-frame reception.
-    mikos::u8 payload[512];
+    osplay::u8 payload[512];
   } echo{};
-  mikos::copy_octets(echo.ethernet.source, peer_mac.octet);
-  mikos::copy_octets(echo.ethernet.destination, guest_mac.octet);
-  echo.ethernet.type = mikos::net16(0x0800);
+  osplay::copy_octets(echo.ethernet.source, peer_mac.octet);
+  osplay::copy_octets(echo.ethernet.destination, guest_mac.octet);
+  echo.ethernet.type = osplay::net16(0x0800);
   echo.ip.version_ihl = 0x45;
   echo.ip.total_length =
-      mikos::net16(sizeof(echo) - sizeof(mikos::EthernetHeader));
-  echo.ip.identification = mikos::net16(0x1234);
+      osplay::net16(sizeof(echo) - sizeof(osplay::EthernetHeader));
+  echo.ip.identification = osplay::net16(0x1234);
   echo.ip.ttl = 32;
   echo.ip.protocol = 1;
-  mikos::copy_octets(echo.ip.source, peer_ip.octet);
-  mikos::copy_octets(echo.ip.destination, guest_ip.octet);
+  osplay::copy_octets(echo.ip.source, peer_ip.octet);
+  osplay::copy_octets(echo.ip.destination, guest_ip.octet);
   echo.icmp.type = 8;
-  echo.icmp.identifier = mikos::net16(7);
-  echo.icmp.sequence = mikos::net16(9);
+  echo.icmp.identifier = osplay::net16(7);
+  echo.icmp.sequence = osplay::net16(9);
   for (unsigned i = 0; i < sizeof(echo.payload); ++i) {
-    echo.payload[i] = static_cast<mikos::u8>(i * 37u + 11u);
+    echo.payload[i] = static_cast<osplay::u8>(i * 37u + 11u);
   }
-  echo.icmp.checksum = mikos::net16(mikos::internet_checksum(
-      reinterpret_cast<const mikos::u8*>(&echo.icmp),
+  echo.icmp.checksum = osplay::net16(osplay::internet_checksum(
+      reinterpret_cast<const osplay::u8*>(&echo.icmp),
       sizeof(echo) - sizeof(echo.ethernet) - sizeof(echo.ip)));
-  echo.ip.checksum = mikos::net16(mikos::internet_checksum(
-      reinterpret_cast<const mikos::u8*>(&echo.ip), sizeof(echo.ip)));
+  echo.ip.checksum = osplay::net16(osplay::internet_checksum(
+      reinterpret_cast<const osplay::u8*>(&echo.ip), sizeof(echo.ip)));
   constexpr auto icmp_size =
-      sizeof(EchoPacket) - sizeof(mikos::EthernetHeader) -
-      sizeof(mikos::Ipv4Header);
+      sizeof(EchoPacket) - sizeof(osplay::EthernetHeader) -
+      sizeof(osplay::Ipv4Header);
   bool echo_ok = false;
   for (unsigned attempt = 0; attempt < 480 && !echo_ok; ++attempt) {
     received.clear();
@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
       continue;
     }
     const auto& reply = *reinterpret_cast<const EchoPacket*>(received.data());
-    echo_ok = reply.ethernet.type == mikos::net16(0x0800) &&
+    echo_ok = reply.ethernet.type == osplay::net16(0x0800) &&
               reply.ip.version_ihl == 0x45 && reply.ip.protocol == 1 &&
               reply.ip.total_length == echo.ip.total_length &&
               reply.icmp.type == 0 && reply.icmp.code == 0 &&
@@ -191,11 +191,11 @@ int main(int argc, char** argv) {
               std::memcmp(reply.ethernet.source, guest_mac.octet, 6) == 0 &&
               std::memcmp(reply.ip.source, guest_ip.octet, 4) == 0 &&
               std::memcmp(reply.ip.destination, peer_ip.octet, 4) == 0 &&
-              mikos::internet_checksum(
-                  reinterpret_cast<const mikos::u8*>(&reply.ip),
+              osplay::internet_checksum(
+                  reinterpret_cast<const osplay::u8*>(&reply.ip),
                   sizeof(reply.ip)) == 0 &&
-              mikos::internet_checksum(
-                  reinterpret_cast<const mikos::u8*>(&reply.icmp),
+              osplay::internet_checksum(
+                  reinterpret_cast<const osplay::u8*>(&reply.icmp),
                   icmp_size) == 0 &&
               std::memcmp(reply.payload, echo.payload,
                           sizeof(echo.payload)) == 0;
@@ -208,12 +208,12 @@ int main(int argc, char** argv) {
         }
       }
       std::cerr << "invalid echo reply: bytes=" << received.size()
-                << " ip_length=" << mikos::net16(reply.ip.total_length)
+                << " ip_length=" << osplay::net16(reply.ip.total_length)
                 << " type=" << unsigned(reply.icmp.type)
-                << " ip_checksum=" << mikos::internet_checksum(
-                     reinterpret_cast<const mikos::u8*>(&reply.ip), sizeof(reply.ip))
-                << " icmp_checksum=" << mikos::internet_checksum(
-                     reinterpret_cast<const mikos::u8*>(&reply.icmp), icmp_size)
+                << " ip_checksum=" << osplay::internet_checksum(
+                     reinterpret_cast<const osplay::u8*>(&reply.ip), sizeof(reply.ip))
+                << " icmp_checksum=" << osplay::internet_checksum(
+                     reinterpret_cast<const osplay::u8*>(&reply.icmp), icmp_size)
                 << " payload_match=" << (std::memcmp(reply.payload, echo.payload,
                                                     sizeof(echo.payload)) == 0) << '\n';
     }
@@ -223,7 +223,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  std::cout << "PASS: IPv4 ping with 512-byte payload received from MikOS on Extreme\n";
+  std::cout << "PASS: IPv4 ping with 512-byte payload received from OSplay on Extreme\n";
   close(socket_fd);
   return 0;
 }

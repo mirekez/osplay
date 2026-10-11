@@ -12,7 +12,7 @@ Implemented in `tests/kernel/socket_syscall_test.cpp`:
 
 Covered by the interactive Tribe ping regression:
 
-- A successful socket receives a normal MikOS file descriptor.
+- A successful socket receives a normal OSplay file descriptor.
 - The descriptor can be passed to interface ioctls and closed by BusyBox.
 - Reconfiguring `eth0` through that descriptor affects ARP and ICMP handling.
 
@@ -33,7 +33,7 @@ Covered by `make tribe-interactive-tcp-test` when `tap-tribe` is configured:
 
 - an unmodified RV32 BusyBox `nc` uses the actual syscall dispatcher to bind,
   listen, accept, receive a host TCP stream, persist its payload, and exit. The
-  runner waits for `MIKOS:TCP_LISTEN <port>` and uses one long-lived host
+  runner waits for `OSPLAY:TCP_LISTEN <port>` and uses one long-lived host
   connection so cycle-accurate execution cannot manufacture backlog pressure
   through retries. nc execs `/bin/sh` on the accepted stream, so the remote
   command also regresses socket duplication to standard input/output,

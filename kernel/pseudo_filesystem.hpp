@@ -1,8 +1,8 @@
 #pragma once
 
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 
-namespace mikos::pseudo_fs {
+namespace osplay::pseudo_fs {
 
 class Filesystem {
  public:
@@ -64,4 +64,4 @@ class Filesystem {
   [[nodiscard]] static Entry entry(Node directory, u32 index);
 };
 
-}  // namespace mikos::pseudo_fs
+}  // namespace osplay::pseudo_fs

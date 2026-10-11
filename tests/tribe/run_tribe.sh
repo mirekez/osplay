@@ -32,7 +32,7 @@ done
 
 source "$root/tests/tribe/paths.sh"
 simulator="$(tribe_build_directory "$simulator_name")/$simulator_name/$simulator_name"
-kernel="$root/build/mikos-tribe-rv32.elf"
+kernel="$root/build/osplay-tribe-rv32.elf"
 peer="$root/build/tests/tribe/net_peer"
 log="$root/build/tribe-test.log"
 peer_log="$root/build/tribe-net-peer.log"
@@ -47,16 +47,16 @@ if [[ "$simulator_name" == "tribe64_multicore" ]]; then
   default_wall_timeout=1800
 fi
 wall_timeout="${TRIBE_TIMEOUT:-$default_wall_timeout}"
-runtime="$(mktemp -d /tmp/mikos-tribe.XXXXXX)"
+runtime="$(mktemp -d /tmp/osplay-tribe.XXXXXX)"
 media_socket="$runtime/ethernet.sock"
 sd_image="$root/build/tests/busybox/rootfs.ext4"
 required_inputs=("$simulator" "$kernel" "$peer")
 media_arguments=()
-expected_output='MIKOS:EXIT 0'
+expected_output='OSPLAY:EXIT 0'
 if ((kernel_only)); then
   log="$root/build/tribe-kernel-$simulator_name.log"
   peer_log="$root/build/tribe-kernel-$simulator_name-peer.log"
-  expected_output='MIKOS:ICMP_ECHO_REPLY'
+  expected_output='OSPLAY:ICMP_ECHO_REPLY'
 else
   required_inputs+=("$sd_image")
   media_arguments=(--sd-image "$sd_image")
@@ -135,32 +135,32 @@ if [[ $simulator_status -ne 0 || $peer_status -ne 0 ]]; then
 fi
 
 if ((kernel_only)); then
-  for marker in MIKOS:BOOT MIKOS:KERNEL_CXX_OK MIKOS:FLAT_DEVICE_IRQ_OFF \
-      MIKOS:ARP_REPLY MIKOS:ICMP_ECHO_REPLY; do
+  for marker in OSPLAY:BOOT OSPLAY:KERNEL_CXX_OK OSPLAY:FLAT_DEVICE_IRQ_OFF \
+      OSPLAY:ARP_REPLY OSPLAY:ICMP_ECHO_REPLY; do
     if ! grep -E -qx "$marker" "$log"; then
       cat "$log" >&2
       echo "FAIL: missing kernel marker: $marker" >&2
       exit 1
     fi
   done
-  echo "PASS: $simulator_name mikOS boot, C++ containers, flat memory, polling UART, ARP and ICMP (no rootfs attached)"
+  echo "PASS: $simulator_name OSplay boot, C++ containers, flat memory, polling UART, ARP and ICMP (no rootfs attached)"
   exit 0
 fi
 
-if ! grep -E -q '^MIKOS:EXT4_ROOT_OK$' "$log" ||
-   ! grep -E -q '^MIKOS:NET_IP 10\.0\.2\.15$' "$log" ||
-   ! grep -E -q '^MIKOS:NET_MAC 02:00:00:00:00:02$' "$log" ||
-   ! grep -E -q '^MIKOS:ARP_REPLY$' "$log" ||
-   ! grep -E -q '^MIKOS:ICMP_ECHO_REPLY$' "$log" ||
-   ! grep -E -q '^MIKOS:PMP_UNAVAILABLE$' "$log" ||
-   ! grep -E -q '^MIKOS:TRIBE_POLLING$' "$log" ||
-   [[ "$(grep -E -c '^MIKOS_WRITE_OK$' "$log" || true)" != 2 ]] ||
-   ! grep -E -q '^MIKOS_BUSYBOX_OK$' "$log" ||
-   ! grep -E -q '^MIKOS:BUSYBOX_EXIT 0$' "$log" ||
-   ! grep -E -q '^MIKOS:EXIT 0$' "$log"; then
+if ! grep -E -q '^OSPLAY:EXT4_ROOT_OK$' "$log" ||
+   ! grep -E -q '^OSPLAY:NET_IP 10\.0\.2\.15$' "$log" ||
+   ! grep -E -q '^OSPLAY:NET_MAC 02:00:00:00:00:02$' "$log" ||
+   ! grep -E -q '^OSPLAY:ARP_REPLY$' "$log" ||
+   ! grep -E -q '^OSPLAY:ICMP_ECHO_REPLY$' "$log" ||
+   ! grep -E -q '^OSPLAY:PMP_UNAVAILABLE$' "$log" ||
+   ! grep -E -q '^OSPLAY:TRIBE_POLLING$' "$log" ||
+   [[ "$(grep -E -c '^OSPLAY_WRITE_OK$' "$log" || true)" != 2 ]] ||
+   ! grep -E -q '^OSPLAY_BUSYBOX_OK$' "$log" ||
+   ! grep -E -q '^OSPLAY:BUSYBOX_EXIT 0$' "$log" ||
+   ! grep -E -q '^OSPLAY:EXIT 0$' "$log"; then
   sed -n '1,320p' "$log" >&2
   cat "$peer_log" >&2
-  echo "FAIL: MikOS Tribe acceptance markers missing" >&2
+  echo "FAIL: OSplay Tribe acceptance markers missing" >&2
   exit 1
 fi
 

@@ -3,7 +3,7 @@
 #include <drivers/storage/root_device.hpp>
 #include <drivers/storage/sector_reader.hpp>
 
-namespace mikos::drivers::fs::root {
+namespace osplay::drivers::fs::root {
 namespace {
 
 using BlockDevice = storage::root_device::Device;
@@ -110,4 +110,4 @@ Error move(const char* from, const char* to) {
 }
 Error sync() { return filesystem.sync(); }
 
-}  // namespace mikos::drivers::fs::root
+}  // namespace osplay::drivers::fs::root

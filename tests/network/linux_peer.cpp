@@ -10,33 +10,33 @@
 #include <cstring>
 #include <drivers/net/net.hpp>
 #include <iostream>
-#include <mikos/arch.hpp>
-#include <mikos/kernel.hpp>
+#include <osplay/arch.hpp>
+#include <osplay/kernel.hpp>
 #include <span>
 #include <thread>
 
 namespace {
 int bridge_fd = -1;
-std::array<mikos::u8, 2048> received;
+std::array<osplay::u8, 2048> received;
 const char* bridge_path;
 const char* client_path;
-constexpr mikos::Ipv4Address address{{192, 168, 76, 2}};
+constexpr osplay::Ipv4Address address{{192, 168, 76, 2}};
 }  // namespace
-namespace mikos::arch {
+namespace osplay::arch {
 u64 time_ticks() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(
              std::chrono::steady_clock::now().time_since_epoch())
              .count() /
          100;
 }
-}  // namespace mikos::arch
-namespace mikos {
+}  // namespace osplay::arch
+namespace osplay {
 void uart_put(char) {}
 void uart_write(const char*, u32) {}
 void write_text(const char*) {}
 void write_u32(u32) {}
-}  // namespace mikos
-namespace mikos::drivers::net {
+}  // namespace osplay
+namespace osplay::drivers::net {
 bool initialize() {
   bridge_fd = ::socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK, 0);
   if (bridge_fd < 0) return false;
@@ -73,10 +73,10 @@ bool transmit(const u8* data, u32 size) {
   std::copy_n(data, size, message.begin() + 3);
   return ::send(bridge_fd, message.data(), size + 3, 0) == size + 3;
 }
-}  // namespace mikos::drivers::net
+}  // namespace osplay::drivers::net
 int main(int argc, char** argv) {
-  using namespace mikos;
-  using namespace mikos::network;
+  using namespace osplay;
+  using namespace osplay::network;
   if (argc != 3) return 2;
   bridge_path = argv[1];
   client_path = argv[2];
@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
   const auto deadline =
       std::chrono::steady_clock::now() + std::chrono::seconds(60);
   while (std::chrono::steady_clock::now() < deadline) {
-    mikos::network::poll();
+    osplay::network::poll();
     if (active == invalid_socket && complete < 3) {
       const auto accepted = socket_accept(listener.handle);
       if (accepted.result == SocketResult::success) active = accepted.handle;
@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
       const auto until =
           std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
       while (std::chrono::steady_clock::now() < until) {
-        mikos::network::poll();
+        osplay::network::poll();
         std::this_thread::sleep_for(std::chrono::microseconds(100));
       }
       ::close(bridge_fd);

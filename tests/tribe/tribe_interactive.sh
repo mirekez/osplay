@@ -3,16 +3,16 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 simulator_name="tribe64"
-kernel="$root/build/mikos-tribe-interactive-rv32.elf"
+kernel="$root/build/osplay-tribe-interactive-rv32.elf"
 kernel_target="tribe-interactive-kernel"
 cycles="${TRIBE_INTERACTIVE_CYCLES:-0}"
-tap_socket="${TRIBE_ETH_TAP_SOCKET:-${MIKOS_TAP_SOCKET:-/tmp/mikos-tap.sock}}"
-tap_name="${TRIBE_INTERACTIVE_TAP:-${MIKOS_TAP:-}}"
+tap_socket="${TRIBE_ETH_TAP_SOCKET:-${OSPLAY_TAP_SOCKET:-/tmp/osplay-tap.sock}}"
+tap_name="${TRIBE_INTERACTIVE_TAP:-${OSPLAY_TAP:-}}"
 host_address="${TRIBE_INTERACTIVE_HOST_ADDRESS:-192.168.76.1}"
 guest_address="${TRIBE_INTERACTIVE_GUEST_ADDRESS:-192.168.76.2}"
 guest_mac="${TRIBE_INTERACTIVE_GUEST_MAC:-02:00:00:00:00:02}"
 use_verilator="${TRIBE_INTERACTIVE_USE_VERILATOR:-0}"
-eth_trace="${TRIBE_INTERACTIVE_ETH_TRACE:-/tmp/mikos-tribe-${UID}.eth.log}"
+eth_trace="${TRIBE_INTERACTIVE_ETH_TRACE:-/tmp/osplay-tribe-${UID}.eth.log}"
 verilator_cores=1
 test_mode=""
 
@@ -24,7 +24,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --multicore)
       simulator_name="tribe64_multicore"
-      kernel="$root/build/mikos-tribe-interactive-multicore-rv32.elf"
+      kernel="$root/build/osplay-tribe-interactive-multicore-rv32.elf"
       kernel_target="tribe-interactive-multicore-kernel"
       verilator_cores=4
       ;;
@@ -107,7 +107,7 @@ source "$root/tests/tribe/paths.sh"
 make -C "$root/tests/busybox" check-linux-toolchain
 simulator="$(tribe_build_directory "$simulator_name")/$simulator_name/$simulator_name"
 rootfs="${TRIBE_INTERACTIVE_SD_IMAGE:-$root/build/tests/busybox/rootfs.ext4}"
-client_key="$root/build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear"
+client_key="$root/build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear"
 maintained_bridge="$root/build/tests/qemu/ethgig_tap"
 
 prepare_arguments=()
@@ -182,11 +182,11 @@ if ! ip neigh show to "$guest_address" dev "$tap_name" | grep -E -qi "$neighbor_
   if ! ip neigh replace "$guest_address" lladdr "$guest_mac" \
        nud permanent dev "$tap_name" 2>/dev/null; then
     if [[ -t 0 ]] && command -v sudo >/dev/null 2>&1; then
-      echo "Configuring permanent MikOS neighbor entry (sudo is required once for this TAP)..." >&2
+      echo "Configuring permanent OSplay neighbor entry (sudo is required once for this TAP)..." >&2
       sudo ip neigh replace "$guest_address" lladdr "$guest_mac" \
         nud permanent dev "$tap_name"
     else
-      echo "warning: cannot configure the permanent MikOS neighbor entry noninteractively." >&2
+      echo "warning: cannot configure the permanent OSplay neighbor entry noninteractively." >&2
       echo "For reliable manual SSH, run once:" >&2
       echo "  sudo ip neigh replace $guest_address lladdr $guest_mac nud permanent dev $tap_name" >&2
       echo "Continuing with ARP fallback for this automated run." >&2
@@ -198,11 +198,11 @@ if [[ ! -t 0 ]]; then
   echo "warning: stdin is not a terminal; UART input will follow stdin" >&2
 fi
 
-echo "Starting MikOS interactive BusyBox shell." >&2
-echo "Type 'exit' to stop MikOS; Ctrl+C stops the simulator; Ctrl+Z suspends it." >&2
+echo "Starting OSplay interactive BusyBox shell." >&2
+echo "Type 'exit' to stop OSplay; Ctrl+C stops the simulator; Ctrl+Z suspends it." >&2
 echo "Host link: $tap_name $host_address/24; guest: $guest_address/24." >&2
 echo "Simulator Ethernet trace: $eth_trace" >&2
-echo "SSH after MIKOS_SSH_STARTING (sessions are serialized):" >&2
+echo "SSH after OSPLAY_SSH_STARTING (sessions are serialized):" >&2
 echo "  $root/build/tests/busybox/dropbear-host/dbclient -i $client_key -c none -y -y root@$guest_address" >&2
 echo "Do not wrap dbclient in 'timeout 1000': native C++ authentication can take about 25 minutes." >&2
 echo "The -i Dropbear-format identity above is required; dbclient's default identity will not authenticate." >&2
@@ -233,4 +233,4 @@ exec env TRIBE_TRACE_ETH=1 TRIBE_TRACE_ETH_FILE="$eth_trace" \
   --sd-image "$rootfs" \
   --uart-stdin \
   --eth-tap-socket "$tap_socket" \
-  --expected-output-contains 'MIKOS:EXIT 0'
+  --expected-output-contains 'OSPLAY:EXIT 0'

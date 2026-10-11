@@ -1,8 +1,8 @@
 #pragma once
 
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 
-namespace mikos::drivers::virtio {
+namespace osplay::drivers::virtio {
 
 enum class Access : u16 {
   device_reads = 0,
@@ -251,4 +251,4 @@ struct alignas(16) PacketBuffer {
 
 static_assert(sizeof(Descriptor) == 16);
 
-}  // namespace mikos::drivers::virtio
+}  // namespace osplay::drivers::virtio

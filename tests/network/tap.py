@@ -9,8 +9,8 @@ import socket
 import subprocess
 import sys
 
-DEFAULT_TAP = "tap-mikos"
-DEFAULT_SOCKET = "/tmp/mikos-tap.sock"
+DEFAULT_TAP = "tap-osplay"
+DEFAULT_SOCKET = "/tmp/osplay-tap.sock"
 MAC = "02:00:00:00:00:02"
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,7 +27,7 @@ def select_tap(requested=None, host="192.168.76.1"):
     if not owners:
         return DEFAULT_TAP
     if len(owners) != 1:
-        raise RuntimeError(f"Multiple interfaces own {host}; select MIKOS_TAP explicitly")
+        raise RuntimeError(f"Multiple interfaces own {host}; select OSPLAY_TAP explicitly")
     info = owners[0].get("linkinfo", {})
     if info.get("info_kind") != "tun" or info.get("info_data", {}).get("type") != "tap":
         raise RuntimeError(f"Host IP {host} belongs to non-TAP interface {owners[0]['ifname']}")
@@ -69,8 +69,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("profile", nargs="?", choices=("rocket", "tribe", "extreme"))
     parser.add_argument("--select-tap", action="store_true", help="print the selected interface without modifying it")
-    parser.add_argument("--tap", default=os.environ.get("MIKOS_TAP"))
-    parser.add_argument("--socket", default=os.environ.get("MIKOS_TAP_SOCKET", DEFAULT_SOCKET))
+    parser.add_argument("--tap", default=os.environ.get("OSPLAY_TAP"))
+    parser.add_argument("--socket", default=os.environ.get("OSPLAY_TAP_SOCKET", DEFAULT_SOCKET))
     parser.add_argument("--host")
     parser.add_argument("--guest")
     parser.add_argument("--mac", default=MAC)
@@ -92,8 +92,8 @@ def main():
         print("Build the shared bridge as your normal user:", file=sys.stderr)
         print("  " + shlex.join(["bash", str(ROOT / "tests/network/build_tap.sh")]), file=sys.stderr)
         print("Create or repair the shared link (keeps an existing bridge running):", file=sys.stderr)
-        print("  " + shlex.join(["sudo", "env", f"MIKOS_TAP={args.tap}",
-              f"MIKOS_TAP_SOCKET={args.socket}", "bash",
+        print("  " + shlex.join(["sudo", "env", f"OSPLAY_TAP={args.tap}",
+              f"OSPLAY_TAP_SOCKET={args.socket}", "bash",
               str(ROOT / "tests/network/start_tap.sh"), "--background"]), file=sys.stderr)
         return 1
     print(f"PASS: {args.profile} TAP {args.tap}, {host} -> {guest}, socket {args.socket}")

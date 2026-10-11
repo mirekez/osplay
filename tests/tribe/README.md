@@ -1,11 +1,11 @@
 # Tribe acceptance test
 
 `make tribe-test` builds the checkout selected by `CPPHDL_HOME`, builds the 64-bit-bus Tribe
-simulator with 32 MiB RAM, builds the MikOS Tribe image, and exercises:
+simulator with 32 MiB RAM, builds the OSplay Tribe image, and exercises:
 
 - the polling NS16550A UART;
 - mounting the shared ext4 root through the `tribe_sd` controller;
-- BusyBox startup and file create/read/rename/delete under MikOS;
+- BusyBox startup and file create/read/rename/delete under OSplay;
 - rootless Ethernet ARP plus an IPv4 ICMP echo request/reply.
 
 The SD driver uses DMA for aligned multi-sector payload reads. Reused
@@ -13,7 +13,7 @@ single-sector cache fills, and multicore reads into reusable kernel metadata
 buffers, use the PIO RX register so the CPU cannot observe stale data while
 Tribe's external D-cache invalidation retires. The runner
 attaches `build/tests/busybox/rootfs.ext4`, and boot must find both executables
-and report `MIKOS:EXT4_ROOT_OK`. The host regression suite also checks DMA
+and report `OSPLAY:EXT4_ROOT_OK`. The host regression suite also checks DMA
 register sequencing, completion, controller errors, timeouts, and destination
 validation.
 
@@ -73,10 +73,10 @@ kernel is involved. The launcher checks this prerequisite before building
 the simulator.
 
 Build the shared bridge and start it in the background from the repository root.
-`make mikos-tap` builds only the shared helper; the legacy Tribe targets also
+`make osplay-tap` builds only the shared helper; the legacy Tribe targets also
 build the checkout's own bridge for explicitly customized configurations.
 The Makefile defaults `CPPHDL_HOME` to `~/cpphdl` and uses the active Conda
-environment (`CONDA_PREFIX`), falling back to `~/mikos/.conda` when none is active.
+environment (`CONDA_PREFIX`), falling back to `~/osplay/.conda` when none is active.
 An external environment such as `~/cpphdl/.conda` works without a local copy.
 Override `CPPHDL_HOME`, `CONDA` (the environment's `bin` directory), or `CXX` on
 the make command line if needed. `tap-tribe` and `tribe-tap` are equivalent:
@@ -87,7 +87,7 @@ sudo bash tests/tribe/start_tap.sh --background
 tests/tribe/tribe_interactive.sh --multicore
 ```
 
-The setup wrapper configures `tap-mikos`, host `192.168.76.1/24`, the permanent
+The setup wrapper configures `tap-osplay`, host `192.168.76.1/24`, the permanent
 neighbor entry for guest `192.168.76.2`, and socket ownership. It returns after
 the socket is ready, prints the log path (`build/tests/network/tap.log`) and a
 `sudo kill -- PID` stop command, and leaves the bridge running independently
@@ -111,17 +111,17 @@ sudo env TRIBE_ETH_TAP_SOCKET=/tmp/my-tribe.sock \
 tests/tribe/tribe_interactive.sh --multicore --tap-socket /tmp/my-tribe.sock
 ```
 
-The TAP bridge socket defaults to `/tmp/mikos-tap.sock`. Set
+The TAP bridge socket defaults to `/tmp/osplay-tap.sock`. Set
 `TRIBE_ETH_TAP_SOCKET` or pass `--tap-socket` to select another running bridge.
-With `tap-mikos` configured as `192.168.76.1/24`, the guest is configured
+With `tap-osplay` configured as `192.168.76.1/24`, the guest is configured
 automatically; it can be pinged from the host:
 
 ```sh
-# MikOS BusyBox shell
+# OSplay BusyBox shell
 ifconfig eth0 192.168.76.2 netmask 255.255.255.0 up
 
 # Host shell
-ping -I tap-mikos -c 4 192.168.76.2
+ping -I tap-osplay -c 4 192.168.76.2
 ```
 
 The root-dependent end-to-end regression uses an already running TAP bridge
@@ -154,7 +154,7 @@ cd /bin
 `execve` can load any executable static RV32 ELF in the image whose segments
 fit the flat user address range; it is not special-cased to stress-ng.
 
-With the existing `tap-mikos` bridge, `make tribe-interactive-tcp-test` starts
+With the existing `tap-osplay` bridge, `make tribe-interactive-tcp-test` starts
 BusyBox `nc -l` in this profile and transfers a marker from the host through a
 real TCP handshake and accepted stream. This validates the passive socket
 slice; it does not imply that Dropbear's fork/pipe/PTY process model is ready.
@@ -210,7 +210,7 @@ admitted. That bounds real-time host retransmission pressure without preventing
 TCP recovery if the guest did lose the delivered frame.
 
 The automated SSH regression starts its first client only after Dropbear has
-parked and the restored BusyBox shell prints `MIKOS_SSH_STARTING`. This matches
+parked and the restored BusyBox shell prints `OSPLAY_SSH_STARTING`. This matches
 the manual workflow and prevents an early connection from bypassing the
 address-space resume path. `TRIBE_INTERACTIVE_SSH_EARLY_CLIENT=1` retains the
 older timing as an explicit diagnostic. Set `TRIBE_INTERACTIVE_SSH_DIAGNOSTICS=1`
@@ -219,7 +219,7 @@ late client. By default the regression leaves dbclient running so the KEX
 ACK/payload/ACK burst matches the normal manual workflow. Set
 `TRIBE_INTERACTIVE_SSH_UART_PREEMPT_PROBE=1` to additionally suspend dbclient
 before the first KEX reply and leave UART input pending until
-`MIKOS:BACKGROUND_CONNECTION_HOLD 3`; this separately verifies that a nested
+`OSPLAY:BACKGROUND_CONNECTION_HOLD 3`; this separately verifies that a nested
 SSH child stays resident instead of being incorrectly parked in favor of its
 listener.
 The second client is a true interactive login shell: it forces `-t`, waits for
@@ -240,7 +240,7 @@ interactive PTY exchange as the first and only session for a shorter focused
 regression.
 
 The full regression starts the second connection immediately after the second
-`MIKOS:BACKGROUND_PARK 2` marker, before BusyBox finishes reloading from SD.
+`OSPLAY:BACKGROUND_PARK 2` marker, before BusyBox finishes reloading from SD.
 This checks that TCP handshakes remain responsive during executable restoration
 with interrupts masked. The marker announces the start of the handoff; it does
 not mean that the console image has finished loading. The storage driver polls
@@ -250,7 +250,7 @@ handshakes that never established instead of passing them to Dropbear.
 To focus on reconnects, run two authenticated command sessions with:
 
 ```sh
-TRIBE_ETH_TAP_SOCKET=/tmp/mikos-tap.sock \
+TRIBE_ETH_TAP_SOCKET=/tmp/osplay-tap.sock \
   tests/tribe/run_interactive_ssh.sh --multicore --reconnect
 ```
 
@@ -266,19 +266,19 @@ raw mode: forwarding bare line feeds would move the cursor down without
 returning it to column zero, making `top` and ordinary multiline output drift
 diagonally across the screen.
 
-Do not start a second Dropbear after `MIKOS:TCP_LISTEN 22` and
-`MIKOS:BACKGROUND_PARK 2`; those markers mean the original service is alive.
+Do not start a second Dropbear after `OSPLAY:TCP_LISTEN 22` and
+`OSPLAY:BACKGROUND_PARK 2`; those markers mean the original service is alive.
 The interactive kernel rejects a duplicate execution with `ETXTBSY` instead
 of suspending the shell through another slow initialization. Restart Dropbear
-only after `MIKOS:BACKGROUND_EXIT` reports that the parked service ended.
+only after `OSPLAY:BACKGROUND_EXIT` reports that the parked service ended.
 
-The MikOS test build also enables Dropbear's test-only `none` cipher. A
+The OSplay test build also enables Dropbear's test-only `none` cipher. A
 Dropbear client built with the same `DROPBEAR_NONE_CIPHER=1` option can request
 an unencrypted, unauthenticated SSH test transport:
 
 ```sh
 build/tests/busybox/dropbear-host/dbclient \
-  -i build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear \
+  -i build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear \
   -c none -y -y root@192.168.76.2
 ```
 
@@ -291,7 +291,7 @@ cycle-level multicore model, reaching public-key authentication can take about
 25 minutes and a command session about 35 minutes. In particular,
 `timeout 1000 dbclient ...` terminates the peer during key exchange; the guest
 then correctly reports `Exit before auth`. The explicit `-i` argument is also
-required: dbclient does not discover the generated MikOS Dropbear-format key
+required: dbclient does not discover the generated OSplay Dropbear-format key
 from its normal per-user default path.
 
 ARP resolution can take longer than Linux's neighbor-probe timeout in the
@@ -307,21 +307,21 @@ flush or gate the client behind a short ping.
 Sessions are serialized by the flat address-space scheduler. Exit the current
 dbclient and allow its session child to close and be reaped before starting
 another; the listener is then restored and accepts the next connection. If no
-accept marker exists, `ip neigh show to 192.168.76.2 dev tap-mikos` must show
+accept marker exists, `ip neigh show to 192.168.76.2 dev tap-osplay` must show
 the fixed MAC with state `PERMANENT`.
 
 The host TAP may emit traffic according to wall time while only a few guest
-cycles execute. MikOS currently implements ARP and IPv4, so the maintained
+cycles execute. OSplay currently implements ARP and IPv4, so the maintained
 bridge and native Tribe adapter reject other EtherTypes before their bounded
 queues. Both queues preserve TCP payload/SYN/FIN/RST and ARP ahead of
 recoverable pure ACKs, retain packets on Unix-datagram backpressure, and clear
 queued traffic when a new simulator sends HELLO. The default bridge also
-disables IPv6 on `tap-mikos`; externally managed bridges do not get modified.
+disables IPv6 on `tap-osplay`; externally managed bridges do not get modified.
 
 The normal BusyBox/rootfs and `tribe_interactive.sh` builds produce this host
 client and a converted Dropbear-format copy of the test identity automatically.
 Passing the OpenSSH private-key file directly to `dbclient -i` is unsupported;
-use the generated `mikos_ssh_key.dropbear`. `make dropbear-client` remains
+use the generated `osplay_ssh_key.dropbear`. `make dropbear-client` remains
 available as an explicit incremental target.
 
 This is a deliberately insecure cleartext SSH protocol test mode rather than
@@ -348,14 +348,14 @@ The preparation script enables `TRIBE_CFG_RV32IA=1` for both simulators because
 static glibc uses atomic instructions. Single-core builds disable
 `TRIBE_CFG_ISR` and `TRIBE_CFG_MMU_TLB`; multicore builds enable them for the
 cross-hart interfaces. These CMake options leave the cpphdl source configuration
-unchanged. MikOS uses polling drivers on this board. CSR and synchronous-trap
+unchanged. OSplay uses polling drivers on this board. CSR and synchronous-trap
 support remain enabled because entering user mode and servicing BusyBox
 `ecall` instructions require them. The cpphdl checkout must include trap
 redirection with the MMU disabled. The minimal single-core Tribe CSR model also excludes PMP, so that test emits
-`MIKOS:PMP_UNAVAILABLE`; the normal MikOS/QEMU build still programs PMP.
+`OSPLAY:PMP_UNAVAILABLE`; the normal OSplay/QEMU build still programs PMP.
 # Shared TAP
 
-Interactive sessions now default to the universal `tap-mikos` bridge at
-`/tmp/mikos-tap.sock`. See [shared TAP setup](../network/TAP.md) for setup,
-checks, and reusing an existing bridge with `MIKOS_TAP`/`MIKOS_TAP_SOCKET`.
+Interactive sessions now default to the universal `tap-osplay` bridge at
+`/tmp/osplay-tap.sock`. See [shared TAP setup](../network/TAP.md) for setup,
+checks, and reusing an existing bridge with `OSPLAY_TAP`/`OSPLAY_TAP_SOCKET`.
 Legacy `TRIBE_*` overrides still work. Use one simulator at a time per bridge.

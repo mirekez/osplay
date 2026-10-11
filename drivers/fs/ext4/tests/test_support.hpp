@@ -4,7 +4,7 @@
 
 #include <unordered_map>
 
-namespace mikos::drivers::fs::ext4::test {
+namespace osplay::drivers::fs::ext4::test {
 
 class Device {
  public:
@@ -253,4 +253,4 @@ class Image {
   }
 };
 
-}  // namespace mikos::drivers::fs::ext4::test
+}  // namespace osplay::drivers::fs::ext4::test

@@ -2,16 +2,16 @@
 #include <drivers/net/net.hpp>
 #include <drivers/uart/uart.hpp>
 #include <kernel/arch/extreme/platform.hpp>
-#include <mikos/io/ring_buffer.hpp>
+#include <osplay/io/ring_buffer.hpp>
 #include <tasks/tasks.h>
 
-namespace mikos {
+namespace osplay {
 bool kernel_cxx_smoke();
 bool extreme_softfloat_smoke();
-} // namespace mikos
+} // namespace osplay
 
-namespace mikos::extreme_platform {
-// Exercise shared mikOS code on the CPU; this is deliberately distinct from
+namespace osplay::extreme_platform {
+// Exercise shared OSplay code on the CPU; this is deliberately distinct from
 // kernel_cxx_smoke's full allocator/list/map/unordered_set acceptance marker.
 __attribute__((noinline)) bool cxx_probe() {
   io::RingBuffer<8> ring;
@@ -38,7 +38,7 @@ bool network_probe() {
   if (!drivers::net::initialize()) {
     return false;
   }
-  write_text("MIKOS:NET_IP 192.168.76.2\nMIKOS:NET_MAC 02:00:00:00:00:02\n");
+  write_text("OSPLAY:NET_IP 192.168.76.2\nOSPLAY:NET_MAC 02:00:00:00:00:02\n");
   const MacAddress mac{{2, 0, 0, 0, 0, 2}};
   const Ipv4Address ip{{192, 168, 76, 2}};
   bool arp = false, echo = false;
@@ -50,14 +50,14 @@ bool network_probe() {
     u32 size = make_arp_reply(frame.data, frame.size, mac, ip);
     if (size && drivers::net::transmit(frame.data, size)) {
       if (!arp) {
-        write_text("MIKOS:ARP_REPLY\n");
+        write_text("OSPLAY:ARP_REPLY\n");
       }
       arp = true;
     } else {
       size = make_icmp_echo_reply(frame.data, frame.size, mac, ip);
       if (size && drivers::net::transmit(frame.data, size)) {
         if (!echo) {
-          write_text("MIKOS:ICMP_ECHO_REPLY\n");
+          write_text("OSPLAY:ICMP_ECHO_REPLY\n");
         }
         echo = true;
       }
@@ -68,25 +68,25 @@ bool network_probe() {
   }
   return false;
 }
-} // namespace mikos::extreme_platform
+} // namespace osplay::extreme_platform
 
 extern "C" unsigned kernel() {
-  using namespace mikos::extreme_platform;
-  if (!mikos::drivers::uart::initialize()) {
+  using namespace osplay::extreme_platform;
+  if (!osplay::drivers::uart::initialize()) {
     return 1;
   }
-  write_text("MIKOS:BOOT\nMIKOS:EXTREME_POLLING\n");
+  write_text("OSPLAY:BOOT\nOSPLAY:EXTREME_POLLING\n");
   if (!cxx_probe()) {
     return 2;
   }
-  write_text("MIKOS:EXTREME_CXX_OK\nMIKOS:FLAT_DEVICE_IRQ_OFF\n");
-#ifndef MIKOS_EXTREME_BOOT_ONLY
-  if (!mikos::extreme_softfloat_smoke() || !mikos::kernel_cxx_smoke()) {
+  write_text("OSPLAY:EXTREME_CXX_OK\nOSPLAY:FLAT_DEVICE_IRQ_OFF\n");
+#ifndef OSPLAY_EXTREME_BOOT_ONLY
+  if (!osplay::extreme_softfloat_smoke() || !osplay::kernel_cxx_smoke()) {
     return 6;
   }
-  write_text("MIKOS:KERNEL_CXX_OK\n");
+  write_text("OSPLAY:KERNEL_CXX_OK\n");
 #endif
-#ifdef MIKOS_EXTREME_MULTICORE
+#ifdef OSPLAY_EXTREME_MULTICORE
   if (::extreme::tasks::issue(0, worker) != ::extreme::tasks::ok) {
     return 3;
   }
@@ -96,14 +96,14 @@ extern "C" unsigned kernel() {
   if (result != 42) {
     return 4;
   }
-  write_text("MIKOS:EXTREME_TASK_OK\n");
+  write_text("OSPLAY:EXTREME_TASK_OK\n");
 #endif
-#ifndef MIKOS_EXTREME_BOOT_ONLY
+#ifndef OSPLAY_EXTREME_BOOT_ONLY
   if (!network_probe()) {
     return 5;
   }
 #endif
-  write_text("MIKOS:EXIT 0\n");
+  write_text("OSPLAY:EXIT 0\n");
   write(::extreme::devices::exit_code, 0);
   return 0;
 }

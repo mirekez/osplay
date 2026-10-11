@@ -16,7 +16,7 @@ class LauncherTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="rocket-hints-")
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / "mikos test"
+        self.root = Path(self.tmp.name) / "osplay test"
         self.scripts = self.root / "tests/rocket"
         self.scripts.mkdir(parents=True)
         shutil.copyfile(LAUNCHER, self.scripts / LAUNCHER.name)
@@ -43,11 +43,11 @@ class LauncherTest(unittest.TestCase):
         self.assertIn("ping -n -i 10 -W 120 192.168.76.2", output)
         self.assertIn("Dropbear starts automatically during boot", output)
         self.assertNotIn("  . /etc/profile", output)
-        self.assertIn("MIKOS:TCP_LISTEN 22", output)
+        self.assertIn("OSPLAY:TCP_LISTEN 22", output)
         client = next(line for line in output.splitlines() if "dropbear-host/dbclient" in line)
         args = shlex.split(client)
         self.assertEqual(args[0], str(self.root / "build/tests/busybox/dropbear-host/dbclient"))
-        self.assertEqual(args[2], str(self.root / "build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear"))
+        self.assertEqual(args[2], str(self.root / "build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear"))
         self.assertEqual(args[-1], "root@192.168.76.2")
         self.assertIn("not yet validated end to end", output)
 
@@ -57,8 +57,8 @@ class LauncherTest(unittest.TestCase):
         self.check_hints(result.stderr)
         setup = next(line for line in result.stderr.splitlines() if "sudo env" in line)
         self.assertEqual(shlex.split(setup), [
-            "sudo", "env", "MIKOS_TAP=tap-rocket-test",
-            "MIKOS_TAP_SOCKET=" + self.socket_path, "bash",
+            "sudo", "env", "OSPLAY_TAP=tap-rocket-test",
+            "OSPLAY_TAP_SOCKET=" + self.socket_path, "bash",
             "tests/network/start_tap.sh", "--background"])
         self.assertNotIn("SIM_SOCKET=", result.stdout)
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname "$0")/paths.sh"
-socket="${ROCKET_ETH_SOCKET:-${MIKOS_TAP_SOCKET:-/tmp/mikos-tap.sock}}"
-tap="${ROCKET_INTERACTIVE_TAP:-${MIKOS_TAP:-}}"
+socket="${ROCKET_ETH_SOCKET:-${OSPLAY_TAP_SOCKET:-/tmp/osplay-tap.sock}}"
+tap="${ROCKET_INTERACTIVE_TAP:-${OSPLAY_TAP:-}}"
 prepare=1
 test_mode=
 network_hints() {
@@ -13,11 +13,11 @@ network_hints() {
   echo 'From another host terminal, after the guest reaches its shell:'
   echo '  ping -n -i 10 -W 120 192.168.76.2'
   echo 'Dropbear starts automatically during boot; no console command is needed.'
-  echo 'Wait for MIKOS:TCP_LISTEN 22, then connect from the host:'
+  echo 'Wait for OSPLAY:TCP_LISTEN 22, then connect from the host:'
   printf '  make -C %q dropbear-client\n' "$root"
   printf '  %q -i %q -c none -y -y root@192.168.76.2\n' \
     "$root/build/tests/busybox/dropbear-host/dbclient" \
-    "$root/build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear"
+    "$root/build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear"
   echo 'Use that explicit test identity; the default SSH identity will not authenticate.'
   echo 'SSH sessions are serialized. This test-only client disables encryption and host-key prompts.'
   echo 'Rocket SSH is not yet validated end to end; ARP, ICMP and TCP command execution are verified.'
@@ -50,7 +50,7 @@ if [[ -z "$tap" ]]; then tap="$(python3 "$root/tests/network/tap.py" --select-ta
     echo 'Start the bridge as follows; only TAP setup needs sudo:'
     printf '  cd %q\n' "$root"
     echo '  bash tests/network/build_tap.sh'
-    printf '  sudo env MIKOS_TAP=%q MIKOS_TAP_SOCKET=%q bash tests/network/start_tap.sh --background\n' "$tap" "$socket"
+    printf '  sudo env OSPLAY_TAP=%q OSPLAY_TAP_SOCKET=%q bash tests/network/start_tap.sh --background\n' "$tap" "$socket"
     echo 'This configures the host IP and permanent guest neighbor entry.'
     echo 'Then rerun this launcher without sudo, with the same options.'
     echo 'If a bridge is already running, use --tap-socket PATH instead of starting another.'
@@ -62,8 +62,8 @@ if [[ -z "$tap" ]]; then tap="$(python3 "$root/tests/network/tap.py" --select-ta
 python3 "$root/tests/network/tap.py" rocket --tap "$tap" --socket "$socket"
 if ((prepare)); then bash "$root/tests/rocket/prepare.sh"; fi
 {
-  echo 'Starting mikOS on RV32 Rocket (Verilator).'
-  echo "Type 'exit' to stop mikOS; Ctrl+C stops the simulator; Ctrl+Z suspends it."
+  echo 'Starting OSplay on RV32 Rocket (Verilator).'
+  echo "Type 'exit' to stop OSplay; Ctrl+C stops the simulator; Ctrl+Z suspends it."
   echo "Ethernet bridge socket: $socket"
   network_hints
 } >&2

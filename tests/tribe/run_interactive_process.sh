@@ -3,7 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 multicore=()
-tap_socket="${TRIBE_ETH_TAP_SOCKET:-${MIKOS_TAP_SOCKET:-/tmp/mikos-tap.sock}}"
+tap_socket="${TRIBE_ETH_TAP_SOCKET:-${OSPLAY_TAP_SOCKET:-/tmp/osplay-tap.sock}}"
 wall_timeout="${TRIBE_INTERACTIVE_PROCESS_TIMEOUT:-7200}"
 nested_only="${TRIBE_INTERACTIVE_PROCESS_NESTED_ONLY:-0}"
 
@@ -24,7 +24,7 @@ if [[ ! -S "$tap_socket" ]]; then
   exit 1
 fi
 
-runtime="$(mktemp -d /tmp/mikos-interactive-process.XXXXXX)"
+runtime="$(mktemp -d /tmp/osplay-interactive-process.XXXXXX)"
 input="$runtime/uart.in"
 log="$runtime/uart.log"
 rootfs="$runtime/rootfs.ext4"
@@ -79,19 +79,19 @@ wait_for_marker() {
 
 wait_for_marker '/ # '
 if [[ "$nested_only" == 1 ]]; then
-  commands=("sh -c 'ls /'; echo MIKOS_NESTED_LS_\$?")
-  markers=('MIKOS:NESTED_CLONE_STACK depth=1' MIKOS_NESTED_LS_0)
+  commands=("sh -c 'ls /'; echo OSPLAY_NESTED_LS_\$?")
+  markers=('OSPLAY:NESTED_CLONE_STACK depth=1' OSPLAY_NESTED_LS_0)
 else
   commands=(
-    'exec 10>&1; echo MIKOS_FD10_CHILD | cat >&10; echo MIKOS_FD10_PARENT >&10'
-    "printf 'MIKOS_THREE_STAGE\\n' | cat | cat"
-    "A=parent; export A; sh -c 'A=child; test \"\$A\" = child'; echo MIKOS_ADDR_\$A"
-    "sh -c 'exit 7'; echo MIKOS_WAIT_\$?"
-    "sh -c 'ls /'; echo MIKOS_NESTED_LS_\$?"
+    'exec 10>&1; echo OSPLAY_FD10_CHILD | cat >&10; echo OSPLAY_FD10_PARENT >&10'
+    "printf 'OSPLAY_THREE_STAGE\\n' | cat | cat"
+    "A=parent; export A; sh -c 'A=child; test \"\$A\" = child'; echo OSPLAY_ADDR_\$A"
+    "sh -c 'exit 7'; echo OSPLAY_WAIT_\$?"
+    "sh -c 'ls /'; echo OSPLAY_NESTED_LS_\$?"
   )
-  markers=(MIKOS_FD10_CHILD MIKOS_FD10_PARENT MIKOS_THREE_STAGE
-           MIKOS_ADDR_parent MIKOS_WAIT_7
-           'MIKOS:NESTED_CLONE_STACK depth=1' MIKOS_NESTED_LS_0)
+  markers=(OSPLAY_FD10_CHILD OSPLAY_FD10_PARENT OSPLAY_THREE_STAGE
+           OSPLAY_ADDR_parent OSPLAY_WAIT_7
+           'OSPLAY:NESTED_CLONE_STACK depth=1' OSPLAY_NESTED_LS_0)
 fi
 printf '%s\n' "${commands[@]}" >&3
 
@@ -103,7 +103,7 @@ printf 'exit\n' >&3
 wait "$simulator_pid"
 simulator_pid=""
 
-for marker in 'MIKOS:BUSYBOX_EXIT 0' 'MIKOS:EXIT 0'; do
+for marker in 'OSPLAY:BUSYBOX_EXIT 0' 'OSPLAY:EXIT 0'; do
   if ! grep -E -q "$marker" "$log"; then
     sed -n '1,360p' "$log" >&2
     echo "missing marker: $marker" >&2

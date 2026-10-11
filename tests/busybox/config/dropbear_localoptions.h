@@ -34,21 +34,21 @@
 #define DROPBEAR_NONE_CIPHER 1
 
 /* Static glibc cannot resolve /etc/passwd through NSS in the freestanding
- * MikOS image.  This fixed test appliance has exactly one login account, so
+ * OSplay image.  This fixed test appliance has exactly one login account, so
  * provide that account without weakening username checks in normal builds. */
-#define DROPBEAR_MIKOS_TEST_ACCOUNT 1
+#define DROPBEAR_OSPLAY_TEST_ACCOUNT 1
 
 /* A cycle-level RV32 Ed25519 operation takes close to an hour on the current
  * native model.  For the explicitly insecure `none` transport, replace it
  * with a transcript-and-public-key-bound proof shared by the paired test
  * client.  Encrypted transports retain upstream Ed25519. */
-#define DROPBEAR_MIKOS_NONE_ED25519_PROOF 1
+#define DROPBEAR_OSPLAY_NONE_ED25519_PROOF 1
 
 /* The upstream five-minute pre-authentication limit is too short for the
  * remaining guest work in a cycle-accurate RV32 simulator. */
 #define AUTH_TIMEOUT 7200
 
-/* MikOS serializes the listener and its children, but retains enough nested
+/* OSplay serializes the listener and its children, but retains enough nested
  * address-space snapshots for listener -> SSH session -> remote command.
  * Keep Dropbear's normal connection fork so the listener survives and can
  * accept subsequent sessions. */

@@ -1,9 +1,9 @@
 #include <bit>
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 
 extern "C" float ceilf(float) noexcept;
 
-namespace mikos {
+namespace osplay {
 // Exercise the compiler-rt operations needed by the actual unordered_set test.
 // Expected IEEE-754 encodings include subnormals, signed zero, infinity and NaN.
 bool extreme_softfloat_smoke() {
@@ -45,4 +45,4 @@ bool extreme_softfloat_smoke() {
   }
   return true;
 }
-} // namespace mikos
+} // namespace osplay

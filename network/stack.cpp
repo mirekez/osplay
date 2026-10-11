@@ -1,11 +1,11 @@
 #include <drivers/net/net.hpp>
-#include <mikos/arch.hpp>
-#include <mikos/kernel.hpp>
-#include <mikos/net/interface.hpp>
-#include <mikos/net/tcp.hpp>
-#include <mikos/net/tcp_table.hpp>
+#include <osplay/arch.hpp>
+#include <osplay/kernel.hpp>
+#include <osplay/net/interface.hpp>
+#include <osplay/net/tcp.hpp>
+#include <osplay/net/tcp_table.hpp>
 
-namespace mikos::network {
+namespace osplay::network {
 namespace {
 
 enum class Reply : u8 {
@@ -21,7 +21,7 @@ class BootstrapStack {
       return true;
     }
     if (!drivers::net::initialize()) {
-      write_text("MIKOS:NET_NONE\n");
+      write_text("OSPLAY:NET_NONE\n");
       return false;
     }
     state_.mac = drivers::net::mac_address();
@@ -40,7 +40,7 @@ class BootstrapStack {
         return true;
       }
     }
-    write_text("MIKOS:NET_TIMEOUT\n");
+    write_text("OSPLAY:NET_TIMEOUT\n");
     return false;
   }
 
@@ -777,13 +777,13 @@ class BootstrapStack {
       case Reply::arp:
         if (!arp_replied_) {
           arp_replied_ = true;
-          write_text("MIKOS:ARP_REPLY\n");
+          write_text("OSPLAY:ARP_REPLY\n");
         }
         break;
       case Reply::echo:
         if (!echo_replied_) {
           echo_replied_ = true;
-          write_text("MIKOS:ICMP_ECHO_REPLY\n");
+          write_text("OSPLAY:ICMP_ECHO_REPLY\n");
         }
         break;
       case Reply::none:
@@ -792,12 +792,12 @@ class BootstrapStack {
   }
 
   void announce_address() const {
-    write_text("MIKOS:NET_IP ");
+    write_text("OSPLAY:NET_IP ");
     for (u32 i = 0; i < 4; ++i) {
       write_u32(state_.address.octet[i]);
       uart_put(i == 3 ? '\n' : '.');
     }
-    write_text("MIKOS:NET_MAC ");
+    write_text("OSPLAY:NET_MAC ");
     constexpr char hex[] = "0123456789abcdef";
     for (u32 i = 0; i < 6; ++i) {
       uart_put(hex[state_.mac.octet[i] >> 4]);
@@ -888,4 +888,4 @@ bool socket_writable(SocketHandle handle) {
 
 const char* tcp_table() { return bootstrap_stack.tcp_table(); }
 
-}  // namespace mikos::network
+}  // namespace osplay::network

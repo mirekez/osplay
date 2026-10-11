@@ -25,7 +25,7 @@ def packet(frame):
 
 
 def check(binary, corrupt=False):
-    with tempfile.TemporaryDirectory(prefix="mikos-peer-check-") as directory:
+    with tempfile.TemporaryDirectory(prefix="osplay-peer-check-") as directory:
         server, client = directory + "/server", directory + "/client"
         peer = subprocess.Popen(
             [binary, server], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True

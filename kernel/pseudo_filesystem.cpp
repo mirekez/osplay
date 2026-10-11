@@ -1,6 +1,6 @@
 #include <kernel/pseudo_filesystem.hpp>
 
-namespace mikos::pseudo_fs {
+namespace osplay::pseudo_fs {
 namespace {
 
 using Node = Filesystem::Node;
@@ -231,7 +231,7 @@ u32 Filesystem::inode(Node node) {
 }
 
 const char* Filesystem::contents(Node node) {
-#ifdef MIKOS_TRIBE_MULTICORE
+#ifdef OSPLAY_TRIBE_MULTICORE
   static constexpr const char cpu[] =
       "cpu  400 0 400 40000 0 0 0 0\n"
       "cpu0 100 0 100 10000 0 0 0 0\n"
@@ -258,7 +258,7 @@ const char* Filesystem::contents(Node node) {
   static constexpr const char load[] = "0.00 0.00 0.00 1/2 2\n";
   static constexpr const char uptime[] = "0.00 0.00\n";
   static constexpr const char version[] =
-      "Linux version 0.1 (MikOS) #1 riscv32\n";
+      "Linux version 0.1 (OSplay) #1 riscv32\n";
   static constexpr const char filesystems[] =
       "nodev\tproc\n"
       "nodev\tsysfs\n"
@@ -290,7 +290,7 @@ const char* Filesystem::contents(Node node) {
       "        0       0    0    0    0     0       0          0\n";
   static constexpr const char osrelease[] = "0.1\n";
   static constexpr const char ostype[] = "Linux\n";
-  static constexpr const char hostname[] = "mikos\n";
+  static constexpr const char hostname[] = "osplay\n";
 
   switch (node) {
     case Node::proc_stat:
@@ -361,4 +361,4 @@ Filesystem::Entry Filesystem::entry(Node directory, u32 index) {
                                : Entry{nullptr, Node::none, Type::none};
 }
 
-}  // namespace mikos::pseudo_fs
+}  // namespace osplay::pseudo_fs

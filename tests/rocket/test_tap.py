@@ -16,11 +16,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("tcp", "ssh"))
     args = parser.parse_args()
-    path = os.environ.get("ROCKET_ETH_TAP_SOCKET", os.environ.get("ROCKET_ETH_SOCKET", os.environ.get("MIKOS_TAP_SOCKET", "/tmp/mikos-tap.sock")))
+    path = os.environ.get("ROCKET_ETH_TAP_SOCKET", os.environ.get("ROCKET_ETH_SOCKET", os.environ.get("OSPLAY_TAP_SOCKET", "/tmp/osplay-tap.sock")))
     if not Path(path).is_socket():
         raise SystemExit("Start tests/rocket/start_tap.sh first; missing " + path)
     subprocess.run(["python3", str(ROOT / "tests/network/tap.py"), "rocket",
-                    "--tap", os.environ.get("ROCKET_INTERACTIVE_TAP", os.environ.get("MIKOS_TAP", "")),
+                    "--tap", os.environ.get("ROCKET_INTERACTIVE_TAP", os.environ.get("OSPLAY_TAP", "")),
                     "--socket", path], check=True)
     timeout = float(os.environ.get("ROCKET_TIMEOUT", "3600"))
     log_path = ROOT / "build/tests/rocket" / (args.mode + ".log")
@@ -37,9 +37,9 @@ def main():
                 log.write(chunk)
                 text.append(chunk.decode(errors="replace"))
                 output = "".join(text).replace("\r", "")
-                for marker in ("MIKOS:BOOT", "MIKOS:KERNEL_CXX_OK", "MIKOS:EXT4_ROOT_OK",
-                               "MIKOS:BUSYBOX_ENTRY", "MIKOS:DROPBEAR_ENTRY", "MIKOS:TCP_LISTEN 22",
-                               "ROCKET_PROCESS_OK", "MIKOS:TCP_LISTEN 2222"):
+                for marker in ("OSPLAY:BOOT", "OSPLAY:KERNEL_CXX_OK", "OSPLAY:EXT4_ROOT_OK",
+                               "OSPLAY:BUSYBOX_ENTRY", "OSPLAY:DROPBEAR_ENTRY", "OSPLAY:TCP_LISTEN 22",
+                               "ROCKET_PROCESS_OK", "OSPLAY:TCP_LISTEN 2222"):
                     if "\n" + marker + "\n" in "\n" + output and marker not in reported:
                         reported.add(marker)
                         print(f"[{time.monotonic() - started:.1f}s] {marker}", flush=True)
@@ -65,7 +65,7 @@ def main():
                 if "".join(text).replace("\r", "").splitlines().count("ROCKET_FILE_OK") != 2:
                     raise RuntimeError("ext4 write/read/rename did not preserve file contents")
                 uart("nc -l -p 2222 -e /bin/sh")
-                wait("MIKOS:TCP_LISTEN 2222")
+                wait("OSPLAY:TCP_LISTEN 2222")
                 with socket.create_connection(("192.168.76.2", 2222), timeout=timeout) as client:
                     client.sendall(b"echo ROCKET_TCP_OK >/tcp-received\nexit\n")
                     while client.recv(4096):
@@ -73,10 +73,10 @@ def main():
                 uart("cat /tcp-received")
                 wait("ROCKET_TCP_OK")
             else:
-                wait("MIKOS:TCP_LISTEN 22")
+                wait("OSPLAY:TCP_LISTEN 22")
                 dropbear = ROOT / "build/tests/busybox/dropbear-host"
                 client_command = [str(dropbear / "dbclient"), "-i",
-                    str(dropbear / "mikos_ssh_key.dropbear"), "-c", "none", "-y", "-y",
+                    str(dropbear / "osplay_ssh_key.dropbear"), "-c", "none", "-y", "-y",
                     "root@192.168.76.2"]
                 # Give dbclient a local PTY, then type exit only after the
                 # remote interactive shell has actually parked at its prompt.
@@ -88,7 +88,7 @@ def main():
                         stdin=subprocess.PIPE, stdout=client_log,
                         stderr=subprocess.STDOUT, start_new_session=True)
                     try:
-                        wait("MIKOS:PTY_CHILD_PARK child=", start)
+                        wait("OSPLAY:PTY_CHILD_PARK child=", start)
                         client.communicate(b"exit\n", timeout=timeout)
                         if client.returncode:
                             raise RuntimeError("SSH logout failed; see ssh-logout.log")
@@ -110,7 +110,7 @@ def main():
             if proc.wait(timeout=timeout) != 0:
                 raise RuntimeError("simulator failed")
             reader.join(5)
-            if "MIKOS:EXIT 0" not in "".join(text):
+            if "OSPLAY:EXIT 0" not in "".join(text):
                 raise RuntimeError("guest did not exit successfully")
             print(f"PASS: Rocket {args.mode}; log: {log_path}")
         finally:
@@ -120,7 +120,7 @@ def main():
                 except subprocess.TimeoutExpired:
                     proc.kill(); proc.wait()
             reader.join(5)
-            Path(f"/tmp/mikos-rocket-net-{proc.pid}.sock").unlink(missing_ok=True)
+            Path(f"/tmp/osplay-rocket-net-{proc.pid}.sock").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

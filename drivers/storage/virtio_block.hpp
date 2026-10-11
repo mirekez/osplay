@@ -1,8 +1,8 @@
 #pragma once
 
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 
-namespace mikos::drivers::storage::virtio_block {
+namespace osplay::drivers::storage::virtio_block {
 
 inline constexpr u32 sector_size = 512;
 
@@ -15,4 +15,4 @@ inline constexpr u32 sector_size = 512;
                                  u32 byte_count);
 [[nodiscard]] bool flush();
 
-}  // namespace mikos::drivers::storage::virtio_block
+}  // namespace osplay::drivers::storage::virtio_block

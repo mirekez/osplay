@@ -65,18 +65,18 @@ def ping_peer(directory, media, tap, host, guest, index):
 
 
 def main():
-    with tempfile.TemporaryDirectory(prefix="mikos-tap-test-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="osplay-tap-test-") as tmp:
         directory = Path(tmp)
         media = str(directory / "shared socket")
         tap = "tap-old-test"
         # Reproduce a stopped legacy bridge and an empty TAP left by failed setup.
-        for name in (tap, "tap-mikos"):
+        for name in (tap, "tap-osplay"):
             subprocess.run(["ip", "tuntap", "add", "dev", name, "mode", "tap"], check=True)
         subprocess.run(["ip", "address", "add", "192.168.76.1/24", "dev", tap], check=True)
         subprocess.run(["ip", "link", "set", "dev", tap, "up"], check=True)
         assert select_tap() == tap
-        env = dict(os.environ, MIKOS_TAP_SOCKET=media)
-        env.pop("MIKOS_TAP", None)
+        env = dict(os.environ, OSPLAY_TAP_SOCKET=media)
+        env.pop("OSPLAY_TAP", None)
         with (directory / "bridge.log").open("w+") as log:
             bridge = subprocess.Popen(["bash", str(ROOT / "tests/network/start_tap.sh")],
                                       env=env, stdout=log, stderr=subprocess.STDOUT,
@@ -101,12 +101,12 @@ def main():
                     ("192.168.76.1", 24)]
                 competing = subprocess.run(
                     ["bash", str(ROOT / "tests/network/start_tap.sh"), "--background"],
-                    env=dict(env, MIKOS_TAP_SOCKET=str(directory / "other socket")),
+                    env=dict(env, OSPLAY_TAP_SOCKET=str(directory / "other socket")),
                     capture_output=True, text=True)
                 assert competing.returncode != 0 and "already has an attached process" in competing.stderr
                 assert not (directory / "other socket").exists() and bridge.poll() is None
                 empty = json.loads(subprocess.check_output(
-                    ["ip", "-j", "-4", "address", "show", "dev", "tap-mikos"], text=True))
+                    ["ip", "-j", "-4", "address", "show", "dev", "tap-osplay"], text=True))
                 assert not any(link["addr_info"] for link in empty)
                 print("PASS: auto-reuse idle legacy TAP; reject a competing bridge", flush=True)
                 subprocess.run(["ip", "neigh", "del", "192.168.76.2", "dev", tap], check=True)

@@ -2,7 +2,7 @@
 
 busybox=/bin/busybox
 
-if [ "${1:-}" != mikos ]; then
+if [ "${1:-}" != osplay ]; then
   $busybox mount -t proc proc /proc 2>/dev/null || true
   $busybox mount -t sysfs sysfs /sys 2>/dev/null || true
   $busybox mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
@@ -13,12 +13,12 @@ if [ "${1:-}" != mikos ]; then
   $busybox chmod 0600 /root/.ssh/authorized_keys
 fi
 
-# The current RV32 network proof uses this static test subnet. MikOS exposes
+# The current RV32 network proof uses this static test subnet. OSplay exposes
 # /dev/null through its pseudo filesystem, so avoid a create-style shell
 # redirection on the immutable ext4 root.
-if [ "${1:-}" = mikos ]; then
-  echo MIKOS_SSH_NET_CONFIG_START
-  echo MIKOS_SSH_NET_CONFIG_DONE
+if [ "${1:-}" = osplay ]; then
+  echo OSPLAY_SSH_NET_CONFIG_START
+  echo OSPLAY_SSH_NET_CONFIG_DONE
 else
   $busybox ifconfig eth0 192.168.76.2 netmask 255.255.255.0 up 2>/dev/null || true
 fi
@@ -26,7 +26,7 @@ fi
 # The image carries a deterministic test-only Ed25519 host key. -s disables
 # password login, the no-syslog build logs to stderr, and -F lets init own the
 # background job rather than relying on daemonization.
-echo MIKOS_SSH_DROPBEAR_START
+echo OSPLAY_SSH_DROPBEAR_START
 /usr/sbin/dropbear -s -F \
   -r /etc/dropbear/dropbear_ed25519_host_key -p 22 &
-echo "MIKOS_SSH_STARTING 192.168.76.2:22 pid=$!"
+echo "OSPLAY_SSH_STARTING 192.168.76.2:22 pid=$!"

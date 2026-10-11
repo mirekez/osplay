@@ -1,10 +1,10 @@
 #pragma once
 
 #include <drivers/fs/filesystem.hpp>
-#include <mikos/container/inplace_vector.hpp>
+#include <osplay/container/inplace_vector.hpp>
 #include <array>
 
-namespace mikos::drivers::fs::fat32 {
+namespace osplay::drivers::fs::fat32 {
 
 enum class Type : u8 {
   file,
@@ -1036,8 +1036,8 @@ class Volume {
            value == '\\' || value == '|';
   }
 
-  using Utf16Name = mikos::inplace_vector<u16, 255>;
-  using DirectorySlots = mikos::inplace_vector<u64, 21>;
+  using Utf16Name = osplay::inplace_vector<u16, 255>;
+  using DirectorySlots = osplay::inplace_vector<u64, 21>;
 
   [[nodiscard]] static bool decode_utf8_name(const char* name, Utf16Name& output) {
     output.clear();
@@ -1343,7 +1343,7 @@ class Volume {
     if (!directory.directory() || entry_offset == 0) {
       return Error::invalid_argument;
     }
-    mikos::inplace_vector<u64, 20> long_offsets;
+    osplay::inplace_vector<u64, 20> long_offsets;
     u32 cluster = directory.first_cluster;
     for (u32 traversed = 0; traversed < geometry_.cluster_count;
          ++traversed) {
@@ -1714,4 +1714,4 @@ class Volume {
   u8 sector_[4096]{};
 };
 
-}  // namespace mikos::drivers::fs::fat32
+}  // namespace osplay::drivers::fs::fat32

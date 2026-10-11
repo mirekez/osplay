@@ -21,10 +21,10 @@ class InteractiveLink:
 
     @classmethod
     def from_environment(cls, media):
-        return cls(select_tap(os.environ.get("MIKOS_TAP")), media, "192.168.76.1")
+        return cls(select_tap(os.environ.get("OSPLAY_TAP")), media, "192.168.76.1")
 
     def setup_hint(self, root, retry):
-        environment = [f"MIKOS_TAP={self.tap}", f"MIKOS_TAP_SOCKET={self.media}"]
+        environment = [f"OSPLAY_TAP={self.tap}", f"OSPLAY_TAP_SOCKET={self.media}"]
         commands = [
             ["bash", str(root / "tests/network/build_tap.sh")],
             [
@@ -80,8 +80,8 @@ class InteractiveLink:
             "Use one simulator at a time on the shared bridge.\n"
             "The guest IP is configured at boot; no ifconfig command or gateway is needed.\n"
             f"From another host terminal, check the link:\n  {ping}\n"
-            "SSH after MIKOS:TCP_LISTEN 22 appears:\n"
+            "SSH after OSPLAY:TCP_LISTEN 22 appears:\n"
             f"  {ssh}\n"
-            "Use this Dropbear client and identity for the mikOS SSH test profile.\n"
+            "Use this Dropbear client and identity for the OSplay SSH test profile.\n"
             "Authentication can take several minutes. Reconnect after the previous client exits."
         )

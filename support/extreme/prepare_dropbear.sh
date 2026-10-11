@@ -7,7 +7,7 @@ build="$base/dropbear"
 llvm="${CPPHDL_HOME:-$HOME/cpphdl}/.conda/bin"
 if [[ ! -d "$source" ]]; then cp -a "$base/sources/dropbear" "$source"; fi
 if [[ ! -f "$source/.extreme-patched" ]]; then
-  patch -l -d "$source" -p1 < "$root/tests/busybox/patches/dropbear-mikos.patch"
+  patch -l -d "$source" -p1 < "$root/tests/busybox/patches/dropbear-osplay.patch"
   touch "$source/.extreme-patched"
 fi
 mkdir -p "$build"

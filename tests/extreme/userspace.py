@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native Extreme + mikOS application acceptance through UART and real Ethernet."""
+"""Native Extreme + OSplay application acceptance through UART and real Ethernet."""
 
 import argparse
 import errno
@@ -64,14 +64,14 @@ def main():
         network
         and (
             args.tap_socket
-            or os.environ.get("MIKOS_TAP")
-            or os.environ.get("MIKOS_TAP_SOCKET")
+            or os.environ.get("OSPLAY_TAP")
+            or os.environ.get("OSPLAY_TAP_SOCKET")
         )
     )
     link = None
     if shared_link and not args.no_network:
         args.tap_socket = args.tap_socket or os.environ.get(
-            "MIKOS_TAP_SOCKET", DEFAULT_SOCKET
+            "OSPLAY_TAP_SOCKET", DEFAULT_SOCKET
         )
         try:
             link = InteractiveLink.from_environment(args.tap_socket)
@@ -141,11 +141,11 @@ def main():
         "userspace-descriptors" if args.test == "descriptors" else "userspace"
     )
     image = Path(
-        os.environ.get("EXTREME_USER_IMAGE", str(BASE / image_folder / "mikos.ecx"))
+        os.environ.get("EXTREME_USER_IMAGE", str(BASE / image_folder / "osplay.ecx"))
     )
     bridge = Path(os.environ.get("EXTREME_BRIDGE", str(BASE / "host/ethgig_tap")))
     client = Path(os.environ.get("EXTREME_SSH_CLIENT", str(BASE / "host/dbclient")))
-    identity = ROOT / "build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear"
+    identity = ROOT / "build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear"
     timeout = int(
         os.environ.get(
             "EXTREME_USER_TIMEOUT", "0" if args.test == "interactive" else "7200"
@@ -174,7 +174,7 @@ def main():
     ) as temporary:
         if args.test == "interactive":
             print(
-                "Preparing private mikOS root filesystem...",
+                "Preparing private OSplay root filesystem...",
                 file=sys.stderr,
                 flush=True,
             )
@@ -186,7 +186,7 @@ def main():
             env=environment,
             stdout=subprocess.DEVNULL,
         )
-        payload = directory / "mikos.ecx"
+        payload = directory / "osplay.ecx"
         shutil.copyfile(image, payload)
         shutil.copyfile(str(image) + ".map", str(payload) + ".map")
         run(
@@ -276,7 +276,7 @@ def main():
                         flush=True,
                     )
                 print(
-                    f"Starting Extreme {flow} simulation: loading RAM and booting mikOS.\n"
+                    f"Starting Extreme {flow} simulation: loading RAM and booting OSplay.\n"
                     "Startup can take several minutes, especially with Verilator. "
                     "Use --progress for cycle updates; Ctrl-C stops the simulator.",
                     file=sys.stderr,
@@ -316,14 +316,14 @@ def main():
                         ("# ", b"l"),
                         ("l", b"s"),
                         ("s", b"\r"),
-                        ("# ", b"ls /; echo MIKOS_SHELL_OK_2\r"),
-                        ("\r\nMIKOS_SHELL_OK_2\r\n", b"ls /; echo MIKOS_SHELL_OK_3\r"),
-                        ("\r\nMIKOS_SHELL_OK_3\r\n", b"top -d 1\r"),
+                        ("# ", b"ls /; echo OSPLAY_SHELL_OK_2\r"),
+                        ("\r\nOSPLAY_SHELL_OK_2\r\n", b"ls /; echo OSPLAY_SHELL_OK_3\r"),
+                        ("\r\nOSPLAY_SHELL_OK_3\r\n", b"top -d 1\r"),
                         ("Mem:", b""),
                         # A second display must arrive without keyboard input.
                         ("Mem:", b"q"),
-                        ("# ", b"pwd; echo MIKOS_TOP_EXIT_OK\r"),
-                        ("\r\nMIKOS_TOP_EXIT_OK\r\n", b"exit\r"),
+                        ("# ", b"pwd; echo OSPLAY_TOP_EXIT_OK\r"),
+                        ("\r\nOSPLAY_TOP_EXIT_OK\r\n", b"exit\r"),
                     ]
                     try:
                         if terminal:
@@ -413,21 +413,21 @@ def main():
                     if code:
                         raise RuntimeError(f"CPU regression failed: {code}")
                     markers = (
-                        ["MIKOS:BUSYBOX_OK"]
+                        ["OSPLAY:BUSYBOX_OK"]
                         if args.test == "boot"
                         else (
-                            ["MIKOS_DESCRIPTOR_METADATA_OK"]
+                            ["OSPLAY_DESCRIPTOR_METADATA_OK"]
                             if args.test == "descriptors"
                             else [
-                                "MIKOS_FD10_CHILD",
-                                "MIKOS_FD10_PARENT",
-                                "MIKOS_THREE_STAGE",
-                                "MIKOS_ADDR_parent",
-                                "MIKOS_WAIT_7",
-                                "MIKOS_NESTED_LS_0",
-                                "MIKOS_FLOAT64_OK",
-                                "MIKOS_SIGNAL_OK",
-                                "MIKOS_PROCESS_OK",
+                                "OSPLAY_FD10_CHILD",
+                                "OSPLAY_FD10_PARENT",
+                                "OSPLAY_THREE_STAGE",
+                                "OSPLAY_ADDR_parent",
+                                "OSPLAY_WAIT_7",
+                                "OSPLAY_NESTED_LS_0",
+                                "OSPLAY_FLOAT64_OK",
+                                "OSPLAY_SIGNAL_OK",
+                                "OSPLAY_PROCESS_OK",
                             ]
                         )
                     )
@@ -444,23 +444,23 @@ def main():
                         )
                     if args.test == "tcp":
                         uart("nc -l -p 2223 -e /bin/sh\n")
-                        wait_for("MIKOS:TCP_LISTEN 2223")
+                        wait_for("OSPLAY:TCP_LISTEN 2223")
                         with socket.create_connection(
                             ("192.168.76.2", 2223), timeout=120
                         ) as peer:
                             peer.settimeout(timeout)
                             peer.sendall(
-                                b"echo MIKOS_TCP_STREAM_OK >/tcp-received\nexit\n"
+                                b"echo OSPLAY_TCP_STREAM_OK >/tcp-received\nexit\n"
                             )
                             peer.shutdown(socket.SHUT_WR)
                             while peer.recv(4096):
                                 pass
                         uart("cat /tcp-received\n")
-                        wait_for("MIKOS_TCP_STREAM_OK")
+                        wait_for("OSPLAY_TCP_STREAM_OK")
                     if args.test == "ssh":
-                        wait_for("MIKOS:TCP_LISTEN 22")
+                        wait_for("OSPLAY:TCP_LISTEN 22")
                         for session in (1, 2, 3):
-                            marker = f"MIKOS_SSH_AUTH_OK_{session}"
+                            marker = f"OSPLAY_SSH_AUTH_OK_{session}"
                             terminal = session == 1
                             remote = (
                                 f"tty && sh -c 'ls /' && echo {marker}; exit 0"
@@ -500,7 +500,7 @@ def main():
                                     "SSH pseudo-terminal was not allocated"
                                 )
                     if args.test == "ssh-shell":
-                        wait_for("MIKOS:TCP_LISTEN 22")
+                        wait_for("OSPLAY:TCP_LISTEN 22")
                         with (results / "ssh-shell.log").open("w") as ssh_log:
                             ssh_command(
                                 [
@@ -526,7 +526,7 @@ def main():
                 wait_for("Extreme board PASS")
                 if args.test in ("ssh", "ssh-shell"):
                     output = log_path.read_text(errors="replace")
-                    if "MIKOS:ENOSYS 54 " in output or "chown /dev/pts/" in output:
+                    if "OSPLAY:ENOSYS 54 " in output or "chown /dev/pts/" in output:
                         raise RuntimeError("SSH PTY ownership cleanup failed")
             print(
                 f"PASS: Extreme {args.test}, {cores} core(s), {flow}; logs: {results}"

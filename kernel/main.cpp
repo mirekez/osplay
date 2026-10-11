@@ -1,29 +1,29 @@
-#include <mikos/arch.hpp>
+#include <osplay/arch.hpp>
 #include <drivers/fs/root.hpp>
 #include <drivers/uart/uart.hpp>
-#include <mikos/kernel.hpp>
+#include <osplay/kernel.hpp>
 
-extern "C" void* memcpy(void*, const void*, mikos::usize);
-extern "C" void* memset(void*, int, mikos::usize);
+extern "C" void* memcpy(void*, const void*, osplay::usize);
+extern "C" void* memset(void*, int, osplay::usize);
 extern "C" void trap_entry();
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
 extern "C" unsigned char __embedded_busybox_begin[];
 extern "C" unsigned char __embedded_busybox_end[];
 extern "C" unsigned char __embedded_dropbear_begin[];
 extern "C" unsigned char __embedded_dropbear_end[];
 #endif
 
-namespace mikos {
+namespace osplay {
 namespace {
 
-#ifdef MIKOS_TRIBE
+#ifdef OSPLAY_TRIBE
 inline constexpr u32 plic_m_enable = 0x82012000;
 inline constexpr u32 plic_s_enable = 0x82012080;
 #else
 inline constexpr u32 plic_m_enable = 0x0c002000;
 inline constexpr u32 plic_s_enable = 0x0c002080;
 #endif
-#if !defined(MIKOS_TRIBE) && !defined(MIKOS_ROCKET)
+#if !defined(OSPLAY_TRIBE) && !defined(OSPLAY_ROCKET)
 inline constexpr u32 sifive_test = 0x00100000;
 #endif
 
@@ -208,7 +208,7 @@ template <typename Reader>
                          writable_only, 0);
 }
 
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
 [[nodiscard]] bool load_preloaded_image(const drivers::fs::root::Node& file,
                                         Image& image, usize begin,
                                         usize end) {
@@ -254,20 +254,20 @@ void copy_path(char* output, const char* input) {
   const auto node = drivers::fs::root::lookup(path);
   Image image{};
   if (!node) {
-    write_text("MIKOS:ELF_LOOKUP_FAILED path=");
+    write_text("OSPLAY:ELF_LOOKUP_FAILED path=");
     write_text(path);
     write_text(" error=");
     write_u32(static_cast<u32>(node.error()));
     write_text("\n");
   }
   if (!node ||
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
       (preloaded_busybox ? !load_preloaded_busybox((*node), image)
                          : !load_image((*node), image, writable_only))) {
 #else
       preloaded_busybox || !load_image((*node), image, writable_only)) {
 #endif
-    write_text("MIKOS:BAD_ELF\n");
+    write_text("OSPLAY:BAD_ELF\n");
     shutdown(1);
   }
   return image;
@@ -294,7 +294,7 @@ void copy_path(char* output, const char* input) {
   if (argument_count == 0 || argument_count > 16 ||
       environment_count > 16 ||
       (environment_count != 0 && environment == nullptr)) {
-    write_text("MIKOS:BAD_ARGUMENTS\n");
+    write_text("OSPLAY:BAD_ARGUMENTS\n");
     shutdown(6);
   }
   for (u32 i = environment_count; i != 0; --i) {
@@ -372,7 +372,7 @@ void disable_interrupt_controllers() {
   return mie == 0 && (mstatus & 8u) == 0 && satp == 0 && plic_off;
 }
 
-#ifndef MIKOS_TRIBE
+#ifndef OSPLAY_TRIBE
 [[nodiscard]] bool protect_kernel() {
   const u32 lower_top = user_begin >> 2;
   const u32 user_top = user_end >> 2;
@@ -412,19 +412,19 @@ bool replace_with_executable(TrapFrame& frame, const char* path,
   const bool busybox = busybox_node &&
                        busybox_node->inode == node->inode;
   Image image{};
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
   const auto dropbear_node =
       drivers::fs::root::lookup("/usr/sbin/dropbear");
   const bool dropbear = dropbear_node &&
                         dropbear_node->inode == node->inode;
   if (dropbear) {
-    write_text("MIKOS:DROPBEAR_PRELOAD_START\n");
+    write_text("OSPLAY:DROPBEAR_PRELOAD_START\n");
   }
   const bool loaded = dropbear ? load_preloaded_dropbear((*node), image)
                                : load_image((*node), image, busybox);
   if (dropbear) {
-    write_text(loaded ? "MIKOS:DROPBEAR_PRELOAD_OK\n"
-                      : "MIKOS:DROPBEAR_PRELOAD_FAIL\n");
+    write_text(loaded ? "OSPLAY:DROPBEAR_PRELOAD_OK\n"
+                      : "OSPLAY:DROPBEAR_PRELOAD_FAIL\n");
   }
   if (!loaded) {
 #else
@@ -465,7 +465,7 @@ void restore_busybox_image() {
 bool restore_executable_image(const char* path) {
   const auto node = drivers::fs::root::lookup(path);
   Image image{};
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
   const auto dropbear_node =
       drivers::fs::root::lookup("/usr/sbin/dropbear");
   if (node && dropbear_node && node->inode == dropbear_node->inode) {
@@ -484,13 +484,13 @@ void start_stress_ng(TrapFrame& frame) {
   if (!replace_with_executable(
           frame, "/bin/stress-ng", arguments,
           sizeof(arguments) / sizeof(arguments[0]))) {
-    write_text("MIKOS:STRESS_NG_ARGUMENTS_BAD\n");
+    write_text("OSPLAY:STRESS_NG_ARGUMENTS_BAD\n");
     shutdown(6);
   }
 }
 
 void uart_put(char value) {
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
   // The interactive UART is attached directly to a host terminal. A line feed
   // alone preserves the cursor column there, so implement the advertised
   // ONLCR behavior and start each new line at column zero.
@@ -527,10 +527,10 @@ void write_u32(u32 value) {
 
 [[noreturn]] void shutdown(u32 code) {
   process.exit_code = code;
-#ifdef MIKOS_ROCKET
+#ifdef OSPLAY_ROCKET
   extern void rocket_shutdown(u32);
   rocket_shutdown(code);
-#elif !defined(MIKOS_TRIBE)
+#elif !defined(OSPLAY_TRIBE)
   *reinterpret_cast<volatile u32*>(sifive_test) =
       code == 0 ? 0x5555 : ((code << 16) | 0x3333);
 #endif
@@ -539,35 +539,35 @@ void write_u32(u32 value) {
   }
 }
 
-}  // namespace mikos
+}  // namespace osplay
 
-namespace mikos {
+namespace osplay {
 void initialize_kernel_tables();
 bool kernel_cxx_smoke();
 }
 
 extern "C" void kernel_main() {
-  using namespace mikos;
+  using namespace osplay;
   asm volatile("csrw mie, zero");
   asm volatile("csrw satp, zero");
   asm volatile("csrw mtvec, %0" : : "r"(trap_entry));
   disable_interrupt_controllers();
 
   static_cast<void>(drivers::uart::initialize());
-  write_text("MIKOS:BOOT\n");
+  write_text("OSPLAY:BOOT\n");
   initialize_kernel_tables();
   if (!kernel_cxx_smoke()) {
-    write_text("MIKOS:KERNEL_CXX_FAIL\n");
+    write_text("OSPLAY:KERNEL_CXX_FAIL\n");
     shutdown(32);
   }
-  write_text("MIKOS:KERNEL_CXX_OK\n");
+  write_text("OSPLAY:KERNEL_CXX_OK\n");
   if (!flat_and_device_irq_off()) {
-    write_text("MIKOS:PLATFORM_STATE_BAD\n");
+    write_text("OSPLAY:PLATFORM_STATE_BAD\n");
     shutdown(3);
   }
-  write_text("MIKOS:FLAT_DEVICE_IRQ_OFF\n");
+  write_text("OSPLAY:FLAT_DEVICE_IRQ_OFF\n");
   const bool network_ready = network::initialize();
-#ifndef MIKOS_INTERACTIVE
+#ifndef OSPLAY_INTERACTIVE
   if (network_ready) {
     static_cast<void>(network::boot_probe());
   }
@@ -583,20 +583,20 @@ extern "C" void kernel_main() {
     static_cast<void>(
         network::interface_ioctl(network::siocsifnetmask, request));
   }
-#ifdef MIKOS_ROCKET
-  write_text("MIKOS:ROCKET_INTERACTIVE\n");
+#ifdef OSPLAY_ROCKET
+  write_text("OSPLAY:ROCKET_INTERACTIVE\n");
 #else
-  write_text("MIKOS:TRIBE_INTERACTIVE\n");
+  write_text("OSPLAY:TRIBE_INTERACTIVE\n");
 #endif
 #endif
   if (!drivers::fs::root::initialize()) {
-    write_text("MIKOS:EXT4_ROOT_FAIL\n");
+    write_text("OSPLAY:EXT4_ROOT_FAIL\n");
     shutdown(8);
   }
-  write_text("MIKOS:EXT4_ROOT_OK\n");
+  write_text("OSPLAY:EXT4_ROOT_OK\n");
   const auto image = required_image(
       "/bin/busybox", false,
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
       true
 #else
       false
@@ -612,20 +612,20 @@ extern "C" void kernel_main() {
   process.session = 1;
   copy_path(process.current_directory, "/");
   copy_path(process.executable_path, "/bin/busybox");
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
   // The PID 1 login shell sources /etc/profile to start Dropbear at boot.
   constexpr const char* arguments[] = {
       "busybox", "sh", "-il", "+m"};
 #else
   constexpr const char* arguments[] = {
       "busybox", "sh", "-c",
-      "echo MIKOS_WRITE_OK >/write-test; "
+      "echo OSPLAY_WRITE_OK >/write-test; "
       "cat /write-test; "
       "mv /write-test /write-moved; "
       "cat /write-moved; "
       "rm /write-moved; "
       "test ! -e /write-moved; "
-      "sync; echo MIKOS_BUSYBOX_OK"};
+      "sync; echo OSPLAY_BUSYBOX_OK"};
 #endif
   const u32 stack = make_initial_stack(
       image, arguments, sizeof(arguments) / sizeof(arguments[0]));
@@ -633,48 +633,48 @@ extern "C" void kernel_main() {
   const u32 probe_size =
       static_cast<u32>(uncooperative_probe_end - uncooperative_probe_begin);
   if (!user_memory.contains(probe, probe_size)) {
-    write_text("MIKOS:PROBE_REGION_BAD\n");
+    write_text("OSPLAY:PROBE_REGION_BAD\n");
     shutdown(5);
   }
   memcpy(reinterpret_cast<void*>(probe), uncooperative_probe_begin, probe_size);
   process.brk = align_up(probe + probe_size, static_cast<u32>(4096));
 
-#ifdef MIKOS_TRIBE
+#ifdef OSPLAY_TRIBE
   // Minimal Tribe excludes the optional PMP CSR range.
-  write_text("MIKOS:PMP_UNAVAILABLE\n");
-  write_text("MIKOS:TRIBE_POLLING\n");
-#ifdef MIKOS_INTERACTIVE
+  write_text("OSPLAY:PMP_UNAVAILABLE\n");
+  write_text("OSPLAY:TRIBE_POLLING\n");
+#ifdef OSPLAY_INTERACTIVE
   arch::start_scheduler_timer();
-  write_text("MIKOS:NETWORK_TIMER_ON\n");
+  write_text("OSPLAY:NETWORK_TIMER_ON\n");
 #endif
   enter_user(image.entry, stack);
 #else
   if (!protect_kernel()) {
-    write_text("MIKOS:PMP_BAD\n");
+    write_text("OSPLAY:PMP_BAD\n");
     shutdown(4);
   }
-  write_text("MIKOS:PMP_ON\n");
-#ifdef MIKOS_INTERACTIVE
+  write_text("OSPLAY:PMP_ON\n");
+#ifdef OSPLAY_INTERACTIVE
   arch::start_scheduler_timer();
-  write_text("MIKOS:NETWORK_TIMER_ON\n");
+  write_text("OSPLAY:NETWORK_TIMER_ON\n");
   enter_user(image.entry, stack);
 #else
   scheduler.start_next_on_timer(image.entry, stack);
   arch::start_scheduler_timer();
-  write_text("MIKOS:SCHED_TIMER_ON\n");
-  write_text("MIKOS:UNCOOPERATIVE_ENTRY\n");
+  write_text("OSPLAY:SCHED_TIMER_ON\n");
+  write_text("OSPLAY:UNCOOPERATIVE_ENTRY\n");
   enter_user(probe, stack - 4096);
 #endif
 #endif
 }
 
-extern "C" void trap_handler(mikos::TrapFrame* frame) {
-  using namespace mikos;
+extern "C" void trap_handler(osplay::TrapFrame* frame) {
+  using namespace osplay;
   constexpr u32 user_ecall = 8;
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
   network::poll();
 #endif
-#ifdef MIKOS_TRIBE
+#ifdef OSPLAY_TRIBE
   constexpr u32 illegal_instruction = 2;
   if (frame->mcause == illegal_instruction) {
     const u32 instruction = frame->mtval;
@@ -763,16 +763,16 @@ extern "C" void trap_handler(mikos::TrapFrame* frame) {
   }
 #endif
   if (frame->mcause == arch::scheduler_timer_cause
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
       || frame->mcause == arch::tribe_user_timer_cause
 #endif
   ) {
     arch::rearm_scheduler_timer();
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
     static bool reported_network_timer_tick = false;
     if (!reported_network_timer_tick) {
       reported_network_timer_tick = true;
-      write_text("MIKOS:NETWORK_TIMER_TICK\n");
+      write_text("OSPLAY:NETWORK_TIMER_TICK\n");
     }
     return;
 #else
@@ -792,7 +792,7 @@ extern "C" void trap_handler(mikos::TrapFrame* frame) {
     deliver_pending_signal(*frame);
     return;
   }
-  write_text("MIKOS:TRAP cause=");
+  write_text("OSPLAY:TRAP cause=");
   write_u32(frame->mcause);
   write_text(" pc=");
   write_u32(frame->mepc);

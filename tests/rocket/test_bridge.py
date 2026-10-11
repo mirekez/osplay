@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix="rocket-bridge-test-") as tmp:
         peer.bind(tmp + "/net.sock")
         peer.settimeout(1)
         os.environ["ROCKET_ETH_SOCKET"] = tmp + "/net.sock"
-        tick = c.CDLL(str(lib)).mikos_net_tick
+        tick = c.CDLL(str(lib)).osplay_net_tick
         tick.argtypes = [c.c_uint8, c.c_uint8, c.c_uint64, c.c_uint8, c.c_uint8, c.c_uint8,
                          c.POINTER(c.c_uint8), c.POINTER(c.c_uint64), c.POINTER(c.c_uint8), c.POINTER(c.c_uint8)]
         def step(reset=0, tx=0, data=0, keep=0, last=0, rx=0):

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <mikos/base.hpp>
-#include <mikos/net/ethernet.hpp>
+#include <osplay/base.hpp>
+#include <osplay/net/ethernet.hpp>
 
-namespace mikos::drivers::net {
+namespace osplay::drivers::net {
 
 struct Frame {
   u8* data;
@@ -17,4 +17,4 @@ struct Frame {
 [[nodiscard]] bool receive(Frame& frame);
 [[nodiscard]] bool transmit(const u8* frame, u32 size);
 
-}  // namespace mikos::drivers::net
+}  // namespace osplay::drivers::net

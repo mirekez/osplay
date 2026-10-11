@@ -1,6 +1,6 @@
-#include <mikos/container/standard.hpp>
-#include <mikos/memory/boot_array.hpp>
-#include <mikos/kernel.hpp>
+#include <osplay/container/standard.hpp>
+#include <osplay/memory/boot_array.hpp>
+#include <osplay/kernel.hpp>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
@@ -9,7 +9,7 @@
 
 extern "C" float ceilf(float) noexcept;
 
-namespace mikos {
+namespace osplay {
 bool kernel_cxx_smoke();
 void write_text(const char* text) { fputs(text, stderr); }
 [[noreturn]] void shutdown(u32 code) { _Exit(static_cast<int>(code)); }
@@ -36,7 +36,7 @@ struct Collision { size_t operator()(int) const noexcept { return 0; } };
 
 void allocator_tests() {
   alignas(256) unsigned char storage[32768];
-  mikos::memory::Arena arena;
+  osplay::memory::Arena arena;
   CHECK(!arena.initialize(storage + 1, sizeof(storage) - 1));
   CHECK(arena.initialize(storage, sizeof(storage)));
   CHECK(!arena.initialize(storage, sizeof(storage)));
@@ -84,54 +84,54 @@ void allocator_tests() {
 
 void container_tests() {
   alignas(256) unsigned char storage[32768];
-  mikos::memory::Arena arena;
+  osplay::memory::Arena arena;
   CHECK(arena.initialize(storage, sizeof(storage)));
-  mikos::memory::Resource resource(arena);
+  osplay::memory::Resource resource(arena);
   {
-    mikos::vector<int> v{mikos::memory::KernelAllocator<int>{resource}};
-    CHECK(mikos::try_reserve(v, 64));
+    osplay::vector<int> v{osplay::memory::KernelAllocator<int>{resource}};
+    CHECK(osplay::try_reserve(v, 64));
     auto* initial = v.data();
     for (int i = 0; i < 64; ++i) v.push_back(i);
     CHECK(v.data() == initial);
-    CHECK(!mikos::try_reserve(v, ~size_t{0}));
-    CHECK(!mikos::try_reserve(v, 1000000));
+    CHECK(!osplay::try_reserve(v, ~size_t{0}));
+    CHECK(!osplay::try_reserve(v, 1000000));
     CHECK(v.size() == 64 && v[63] == 63 && v.data() == initial);
-    CHECK(mikos::try_reserve(v, 128));
+    CHECK(osplay::try_reserve(v, 128));
     v.erase(v.begin() + 5);
     CHECK(v[5] == 6);
     auto copy = v;
     auto moved = std::move(copy);
     CHECK(moved.size() == 63 && copy.empty());
-    mikos::vector<Aligned> aligned{mikos::memory::KernelAllocator<Aligned>{resource}};
-    CHECK(mikos::try_reserve(aligned, 2));
+    osplay::vector<Aligned> aligned{osplay::memory::KernelAllocator<Aligned>{resource}};
+    CHECK(osplay::try_reserve(aligned, 2));
     aligned.push_back({42});
     CHECK(reinterpret_cast<size_t>(aligned.data()) % 256 == 0);
 
-    mikos::map<int,int> ordered{mikos::memory::KernelAllocator<std::pair<const int,int>>{resource}};
-    for (int i = 63; i >= 0; --i) CHECK(mikos::try_insert(ordered, i, i * 2));
-    CHECK(mikos::try_insert(ordered, 3, 99));
+    osplay::map<int,int> ordered{osplay::memory::KernelAllocator<std::pair<const int,int>>{resource}};
+    for (int i = 63; i >= 0; --i) CHECK(osplay::try_insert(ordered, i, i * 2));
+    CHECK(osplay::try_insert(ordered, 3, 99));
     CHECK(ordered.at(3) == 6 && ordered.size() == 64);
     int index = 0;
     for (const auto& [key, value] : ordered) CHECK(key == index++ && value == key * 2);
     for (int i = 0; i < 64; i += 2) CHECK(ordered.erase(i) == 1);
     CHECK(ordered.size() == 32 && ordered.begin()->first == 1);
 
-    mikos::unordered_set<int, Collision> set{mikos::memory::KernelAllocator<int>{resource}};
-    CHECK(mikos::try_reserve(set, 64));
-    for (int i = 0; i < 64; ++i) CHECK(mikos::try_insert(set, i));
-    CHECK(mikos::try_insert(set, 9) && set.size() == 64);
+    osplay::unordered_set<int, Collision> set{osplay::memory::KernelAllocator<int>{resource}};
+    CHECK(osplay::try_reserve(set, 64));
+    for (int i = 0; i < 64; ++i) CHECK(osplay::try_insert(set, i));
+    CHECK(osplay::try_insert(set, 9) && set.size() == 64);
     for (int i = 0; i < 64; ++i) CHECK(set.contains(i));
     CHECK(set.erase(31) == 1 && !set.contains(31));
-    CHECK(mikos::try_insert(set, 31));
-    CHECK(mikos::try_reserve(set, 128));
+    CHECK(osplay::try_insert(set, 31));
+    CHECK(osplay::try_reserve(set, 128));
     CHECK(set.contains(63));
     set.max_load_factor(0.5f);
-    CHECK(!mikos::try_reserve(set, 256));
+    CHECK(!osplay::try_reserve(set, 256));
 
-    mikos::list<int> first{mikos::memory::KernelAllocator<int>{resource}};
-    mikos::list<int> second{mikos::memory::KernelAllocator<int>{resource}};
-    CHECK(mikos::try_push_back(first, 3) && mikos::try_push_back(first, 1));
-    CHECK(mikos::try_push_back(second, 2));
+    osplay::list<int> first{osplay::memory::KernelAllocator<int>{resource}};
+    osplay::list<int> second{osplay::memory::KernelAllocator<int>{resource}};
+    CHECK(osplay::try_push_back(first, 3) && osplay::try_push_back(first, 1));
+    CHECK(osplay::try_push_back(second, 2));
     const auto allocations = arena.allocations();
     first.splice(first.end(), second);
     CHECK(second.empty() && arena.allocations() == allocations);
@@ -142,7 +142,7 @@ void container_tests() {
     auto list_copy = first;
     CHECK(list_copy.size() == 3);
     {
-      mikos::vector<Object> objects{mikos::memory::KernelAllocator<Object>{resource}};
+      osplay::vector<Object> objects{osplay::memory::KernelAllocator<Object>{resource}};
       objects.reserve(4);
       objects.emplace_back(1);
       objects.emplace_back(2);
@@ -152,7 +152,7 @@ void container_tests() {
       CHECK(Object::live == 2);
     }
     CHECK(Object::live == 0);
-    mikos::inplace_vector<Object, 2> local;
+    osplay::inplace_vector<Object, 2> local;
     CHECK(local.try_emplace_back(1) != nullptr);
     CHECK(local.try_emplace_back(2) != nullptr);
     CHECK(local.try_emplace_back(3) == nullptr);
@@ -162,7 +162,7 @@ void container_tests() {
     local_copy.clear();
     local.pop_back();
     CHECK(Object::live == 1);
-    mikos::inplace_vector<int, 0> empty;
+    osplay::inplace_vector<int, 0> empty;
     CHECK(empty.try_push_back(1) == nullptr && empty.empty());
   }
   CHECK(Object::live == 0);
@@ -171,33 +171,33 @@ void container_tests() {
 
 void exhaustion_tests() {
   alignas(64) unsigned char storage[1024];
-  mikos::memory::Arena arena;
+  osplay::memory::Arena arena;
   CHECK(arena.initialize(storage, sizeof(storage)));
-  mikos::memory::Resource resource(arena);
+  osplay::memory::Resource resource(arena);
   {
-    mikos::list<int> list{mikos::memory::KernelAllocator<int>{resource}};
+    osplay::list<int> list{osplay::memory::KernelAllocator<int>{resource}};
     int count = 0;
-    while (mikos::try_push_back(list, count)) ++count;
+    while (osplay::try_push_back(list, count)) ++count;
     CHECK(count > 0 && list.size() == static_cast<size_t>(count));
     list.pop_front();
-    CHECK(mikos::try_push_back(list, 42));
+    CHECK(osplay::try_push_back(list, 42));
   }
   {
-    mikos::map<int,int> map{mikos::memory::KernelAllocator<std::pair<const int,int>>{resource}};
+    osplay::map<int,int> map{osplay::memory::KernelAllocator<std::pair<const int,int>>{resource}};
     int count = 0;
-    while (mikos::try_insert(map, count, count)) ++count;
+    while (osplay::try_insert(map, count, count)) ++count;
     CHECK(count > 0 && map.size() == static_cast<size_t>(count));
-    CHECK(mikos::try_insert(map, 0, 999));
+    CHECK(osplay::try_insert(map, 0, 999));
   }
   {
-    mikos::unordered_set<int> set{mikos::memory::KernelAllocator<int>{resource}};
+    osplay::unordered_set<int> set{osplay::memory::KernelAllocator<int>{resource}};
     int count = 0;
-    while (mikos::try_insert(set, count)) ++count;
+    while (osplay::try_insert(set, count)) ++count;
     CHECK(count > 0 && set.size() == static_cast<size_t>(count));
     for (int i = 0; i < count; ++i) CHECK(set.contains(i));
   }
   {
-    mikos::memory::Resource::Reservation unused(resource, 128, 16);
+    osplay::memory::Resource::Reservation unused(resource, 128, 16);
     CHECK(static_cast<bool>(unused));
   }
   CHECK(arena.used() == 0);
@@ -213,7 +213,7 @@ void exhaustion_tests() {
     CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 30);
   }
   struct Defaults { int sentinel{-1}; };
-  mikos::memory::BootArray<Defaults[3], 32> table;
+  osplay::memory::BootArray<Defaults[3], 32> table;
   table.initialize();
   for (auto& row : table) for (auto& item : row) CHECK(item.sentinel == -1);
 }
@@ -221,23 +221,23 @@ void exhaustion_tests() {
 
 void propagation_and_math_tests() {
   alignas(64) unsigned char left_storage[2048], right_storage[2048];
-  mikos::memory::Arena left, right;
+  osplay::memory::Arena left, right;
   CHECK(left.initialize(left_storage, sizeof(left_storage)));
   CHECK(right.initialize(right_storage, sizeof(right_storage)));
-  mikos::memory::Resource lr(left), rr(right);
+  osplay::memory::Resource lr(left), rr(right);
   {
-    mikos::memory::KernelAllocator<int> la(lr), ra(rr);
-    CHECK(la != ra && la == mikos::memory::KernelAllocator<long>(la));
-    mikos::vector<int> a{la}, b{ra};
-    CHECK(mikos::try_reserve(a, 8) && mikos::try_reserve(b, 8));
+    osplay::memory::KernelAllocator<int> la(lr), ra(rr);
+    CHECK(la != ra && la == osplay::memory::KernelAllocator<long>(la));
+    osplay::vector<int> a{la}, b{ra};
+    CHECK(osplay::try_reserve(a, 8) && osplay::try_reserve(b, 8));
     a.push_back(11);
     b.push_back(22);
     b = a;
     CHECK(b.front() == 11 && b.get_allocator() == ra);
     b = std::move(a);
     CHECK(b.get_allocator() == la && a.empty());
-    mikos::vector<int> c{ra};
-    CHECK(mikos::try_reserve(c, 8));
+    osplay::vector<int> c{ra};
+    CHECK(osplay::try_reserve(c, 8));
     c.push_back(33);
     c.swap(b);
     CHECK(c.front() == 11 && c.get_allocator() == la);
@@ -258,7 +258,7 @@ void propagation_and_math_tests() {
 }
 
 int main() {
-  CHECK(mikos::kernel_cxx_smoke());
+  CHECK(osplay::kernel_cxx_smoke());
   allocator_tests();
   container_tests();
   exhaustion_tests();

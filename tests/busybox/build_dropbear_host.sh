@@ -10,14 +10,14 @@ source_tree="$1"
 output="$2"
 jobs="$3"
 options="$4"
-scratch="$(mktemp -d /tmp/mikos-dropbear-host.XXXXXX)"
+scratch="$(mktemp -d /tmp/osplay-dropbear-host.XXXXXX)"
 
 cleanup() {
   rm -r "$scratch"
 }
 trap cleanup EXIT
 
-# Use the already downloaded and MikOS-patched source, but configure a clean
+# Use the already downloaded and OSplay-patched source, but configure a clean
 # native copy so the RV32 server's in-tree build is not disturbed.
 cp -a "$source_tree/." "$scratch/"
 make -C "$scratch" distclean >/dev/null 2>&1 || true

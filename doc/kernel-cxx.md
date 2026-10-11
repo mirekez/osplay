@@ -1,6 +1,6 @@
 # Kernel C++ containers
 
-Include `<mikos/container/standard.hpp>` in kernel code. The build prepares
+Include `<osplay/container/standard.hpp>` in kernel code. The build prepares
 checksum-pinned sources automatically under `build/kernel-cxx`; nothing from
 the host's C++ library is linked. First preparation needs curl, tar, CMake,
 flock and network access. Archives cached there support subsequent offline
@@ -9,35 +9,35 @@ toolchain installation, or override `RISCV_PREFIX` / `RISCV_SYSROOT`.
 
 | Name | Implementation | Allocation |
 |---|---|---|
-| `mikos::vector<T>` | `std::vector` | Explicit kernel allocator |
-| `mikos::list<T>` | `std::list` | Explicit kernel allocator |
-| `mikos::map<K,V,Compare>` | `std::map` | Explicit kernel allocator |
-| `mikos::unordered_set<K,Hash,Equal>` | `std::unordered_set` | Explicit kernel allocator |
-| `mikos::inplace_vector<T,N>` | Beman fallback; future `std::inplace_vector` | Embedded storage |
+| `osplay::vector<T>` | `std::vector` | Explicit kernel allocator |
+| `osplay::list<T>` | `std::list` | Explicit kernel allocator |
+| `osplay::map<K,V,Compare>` | `std::map` | Explicit kernel allocator |
+| `osplay::unordered_set<K,Hash,Equal>` | `std::unordered_set` | Explicit kernel allocator |
+| `osplay::inplace_vector<T,N>` | Beman fallback; future `std::inplace_vector` | Embedded storage |
 | `std::array`, `std::span`, `std::string_view` | libc++ | No allocation |
 
 The aliases retain the full underlying standard container API. For spelling
-`std::vector` directly, provide `mikos::memory::KernelAllocator<T>` as its
+`std::vector` directly, provide `osplay::memory::KernelAllocator<T>` as its
 allocator template argument. Default `std::allocator` allocations fail to link
 deliberately; kernel code must state who owns the memory.
 
 ```cpp
-#include <mikos/container/standard.hpp>
+#include <osplay/container/standard.hpp>
 
 bool example() {
   alignas(64) unsigned char bytes[4096]; // choose a subsystem budget
-  mikos::memory::Arena arena;
+  osplay::memory::Arena arena;
   if (!arena.initialize(bytes, sizeof(bytes))) return false;
-  mikos::memory::Resource resource(arena);
-  mikos::vector<unsigned> values{
-      mikos::memory::KernelAllocator<unsigned>{resource}};
-  if (!mikos::try_reserve(values, 64)) return false; // map to ENOMEM if appropriate
+  osplay::memory::Resource resource(arena);
+  osplay::vector<unsigned> values{
+      osplay::memory::KernelAllocator<unsigned>{resource}};
+  if (!osplay::try_reserve(values, 64)) return false; // map to ENOMEM if appropriate
   values.push_back(42); // safe while size() < capacity()
 
-  mikos::unordered_set<unsigned> keys{
-      mikos::memory::KernelAllocator<unsigned>{resource}};
-  if (!mikos::try_insert(keys, 42u)) return false;
-  mikos::inplace_vector<unsigned, 8> local;
+  osplay::unordered_set<unsigned> keys{
+      osplay::memory::KernelAllocator<unsigned>{resource}};
+  if (!osplay::try_insert(keys, 42u)) return false;
+  osplay::inplace_vector<unsigned, 8> local;
   return local.try_push_back(values.front()) != nullptr;
 } // containers die before resource, arena and storage
 ```
@@ -70,15 +70,15 @@ work. No mmap or extra reserved heap region is introduced.
 
 Run `make kernel-cxx-test`: host UBSan tests, all four RV32 kernel links and
 binary inspection, then a disk-free QEMU test of all five containers inside the
-real kernel. Every normal boot also emits `MIKOS:KERNEL_CXX_OK`. `make test`
+real kernel. Every normal boot also emits `OSPLAY:KERNEL_CXX_OK`. `make test`
 includes the host tests. With the native Tribe simulator already built, the
 same boot check can run without a disk, network peer or Verilator:
 
 ```sh
 build/tests/tribe/cpphdl-build/tribe64/tribe64 --noveril \
-  --program build/mikos-tribe-rv32.elf --elf --cycles 8000000 \
+  --program build/osplay-tribe-rv32.elf --elf --cycles 8000000 \
   --start-mem-addr 0x80000000 --ram-size 8388608 --boot-priv m \
-  --expected-output-contains MIKOS:KERNEL_CXX_OK --mirror-uart
+  --expected-output-contains OSPLAY:KERNEL_CXX_OK --mirror-uart
 ```
 
 This checks container execution, not the full Tribe filesystem/SSH workflow.

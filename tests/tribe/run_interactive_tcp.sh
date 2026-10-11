@@ -3,8 +3,8 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 multicore=()
-tap="${TRIBE_INTERACTIVE_TAP:-${MIKOS_TAP:-$(python3 "$root/tests/network/tap.py" --select-tap)}}"
-tap_socket="${TRIBE_ETH_TAP_SOCKET:-${MIKOS_TAP_SOCKET:-/tmp/mikos-tap.sock}}"
+tap="${TRIBE_INTERACTIVE_TAP:-${OSPLAY_TAP:-$(python3 "$root/tests/network/tap.py" --select-tap)}}"
+tap_socket="${TRIBE_ETH_TAP_SOCKET:-${OSPLAY_TAP_SOCKET:-/tmp/osplay-tap.sock}}"
 guest_address="${TRIBE_INTERACTIVE_GUEST_ADDRESS:-192.168.76.2}"
 guest_port="${TRIBE_INTERACTIVE_TCP_PORT:-2222}"
 wall_timeout="${TRIBE_INTERACTIVE_TCP_TIMEOUT:-1800}"
@@ -27,7 +27,7 @@ if ! ip link show dev "$tap" >/dev/null 2>&1; then
   exit 1
 fi
 
-runtime="$(mktemp -d /tmp/mikos-interactive-tcp.XXXXXX)"
+runtime="$(mktemp -d /tmp/osplay-interactive-tcp.XXXXXX)"
 input="$runtime/uart.in"
 log="$runtime/uart.log"
 rootfs="$runtime/rootfs.ext4"
@@ -76,7 +76,7 @@ printf 'ifconfig eth0 %s netmask 255.255.255.0 up\n' "$guest_address" >&3
 wait_for_prompt_count 2
 printf 'nc -l -p %s -e /bin/sh\n' "$guest_port" >&3
 
-listen_marker="MIKOS:TCP_LISTEN $guest_port"
+listen_marker="OSPLAY:TCP_LISTEN $guest_port"
 deadline=$((SECONDS + wall_timeout))
 while ! grep -E -q "$listen_marker" "$log" 2>/dev/null; do
   if ((SECONDS >= deadline)) || ! kill -0 "$simulator_pid" 2>/dev/null; then
@@ -87,7 +87,7 @@ while ! grep -E -q "$listen_marker" "$log" 2>/dev/null; do
   sleep 0.1
 done
 
-if ! printf 'echo MIKOS_TCP_STREAM_OK >/tcp-received\nexit\n' | \
+if ! printf 'echo OSPLAY_TCP_STREAM_OK >/tcp-received\nexit\n' | \
     nc -N -s "${TRIBE_INTERACTIVE_HOST_ADDRESS:-192.168.76.1}" \
        -w "$client_timeout" "$guest_address" "$guest_port"; then
   sed -n '1,360p' "$log" >&2
@@ -102,7 +102,7 @@ printf 'exit\n' >&3
 wait "$simulator_pid"
 simulator_pid=""
 
-for marker in 'MIKOS_TCP_STREAM_OK' 'MIKOS:BUSYBOX_EXIT 0' 'MIKOS:EXIT 0'; do
+for marker in 'OSPLAY_TCP_STREAM_OK' 'OSPLAY:BUSYBOX_EXIT 0' 'OSPLAY:EXIT 0'; do
   if ! grep -E -q "$marker" "$log"; then
     sed -n '1,360p' "$log" >&2
     echo "missing marker: $marker" >&2

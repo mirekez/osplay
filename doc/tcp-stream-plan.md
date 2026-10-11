@@ -4,7 +4,7 @@
 
 The first stream slice gives flat RV32 workloads a real passive IPv4 TCP
 transport. It is intentionally allocation-free and polling-only, matching the
-rest of MikOS. The completed slice includes `SOCK_STREAM`, `bind`, `listen`,
+rest of OSplay. The completed slice includes `SOCK_STREAM`, `bind`, `listen`,
 `accept`/`accept4`, accepted-socket `read`/`write`, readiness polling, endpoint
 queries, shutdown/close, and `/proc/net/tcp` visibility.
 
@@ -140,9 +140,9 @@ combinatorial tests for features explicitly outside the boundary.
 - Build normal, Tribe, interactive Tribe, and multicore interactive kernels
   with freestanding warnings treated as errors.
 - Target acceptance runner: configure `eth0`, run BusyBox `nc -l`, wait for the
-  kernel's deterministic `MIKOS:TCP_LISTEN <port>` milestone, connect one
+  kernel's deterministic `OSPLAY:TCP_LISTEN <port>` milestone, connect one
   long-lived host client bound to the TAP address, transfer a unique marker,
-  close cleanly, verify the marker from the guest filesystem, and exit MikOS
+  close cleanly, verify the marker from the guest filesystem, and exit OSplay
   normally. A single client tuple is important on a cycle-accurate target:
   short host retries would test SYN-expiry policy rather than stream I/O.
   BusyBox's nc-1.10-compatible applet execs `/bin/sh` on the accepted socket;

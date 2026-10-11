@@ -6,8 +6,8 @@ _start:
   li t0, 8
   csrc mstatus, t0
 
-#ifdef MIKOS_ROCKET
-  /* Rocket does not reset delegation CSRs. mikOS handles U-mode traps in M. */
+#ifdef OSPLAY_ROCKET
+  /* Rocket does not reset delegation CSRs. OSplay handles U-mode traps in M. */
   csrw medeleg, zero
   csrw mideleg, zero
   li t0, 7
@@ -15,8 +15,8 @@ _start:
   csrw scounteren, t0
 #endif
 
-#ifdef MIKOS_TRIBE
-  /* MikOS currently schedules on the boot hart. Keep additional Tribe harts
+#ifdef OSPLAY_TRIBE
+  /* OSplay currently schedules on the boot hart. Keep additional Tribe harts
      from racing through the shared BSS, stack, and device initialization. */
   /* cpphdl supplies the hart ID in the standard reset argument a0; its
      mhartid CSR is currently hardwired to zero. */
@@ -38,7 +38,7 @@ _start:
 3:
   wfi
   j 3b
-#ifdef MIKOS_TRIBE
+#ifdef OSPLAY_TRIBE
 .Lsecondary_hart:
   wfi
   j .Lsecondary_hart
@@ -49,7 +49,7 @@ _start:
 .global enter_user
 .type enter_user, @function
 enter_user:
-#ifdef MIKOS_ROCKET
+#ifdef OSPLAY_ROCKET
   fence.i
 #endif
   csrw mepc, a0
@@ -59,7 +59,7 @@ enter_user:
   csrr t0, mstatus
   li t1, ~(3 << 11)
   and t0, t0, t1
-#ifdef MIKOS_INTERACTIVE
+#ifdef OSPLAY_INTERACTIVE
   li t1, (1 << 7)
   or t0, t0, t1
 #else

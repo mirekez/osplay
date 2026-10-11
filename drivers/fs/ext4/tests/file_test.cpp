@@ -4,11 +4,11 @@
 
 namespace {
 
-using namespace mikos;
-using namespace mikos::drivers::fs;
-using namespace mikos::drivers::fs::ext4;
+using namespace osplay;
+using namespace osplay::drivers::fs;
+using namespace osplay::drivers::fs::ext4;
 
-void check_sparse_partial_read(mikos::test::Suite& suite) {
+void check_sparse_partial_read(osplay::test::Suite& suite) {
   ext4::test::Image image;
   image.two_extent_inode(3, 0x81a4, 3 * 1024, 0, 11, 1, 2, 12, 1);
   u8 first[1024]{};
@@ -25,28 +25,28 @@ void check_sparse_partial_read(mikos::test::Suite& suite) {
   u8 output[1200]{};
   const auto read =
       mounted->read((*inode), 900, output, sizeof(output));
-  MIKOS_CHECK(suite, read);
-  MIKOS_CHECK(suite, (*read) == sizeof(output));
+  OSPLAY_CHECK(suite, read);
+  OSPLAY_CHECK(suite, (*read) == sizeof(output));
   for (u32 index = 0; index < 124; ++index) {
-    MIKOS_CHECK(suite, output[index] == 0x11);
+    OSPLAY_CHECK(suite, output[index] == 0x11);
   }
   for (u32 index = 124; index < 1148; ++index) {
-    MIKOS_CHECK(suite, output[index] == 0);
+    OSPLAY_CHECK(suite, output[index] == 0);
   }
   for (u32 index = 1148; index < sizeof(output); ++index) {
-    MIKOS_CHECK(suite, output[index] == 0x33);
+    OSPLAY_CHECK(suite, output[index] == 0x33);
   }
 
   const auto eof =
       mounted->read((*inode), 3 * 1024, output, 1);
-  MIKOS_CHECK(suite, eof);
-  MIKOS_CHECK(suite, (*eof) == 0);
+  OSPLAY_CHECK(suite, eof);
+  OSPLAY_CHECK(suite, (*eof) == 0);
 }
 
 }  // namespace
 
 int main() {
-  mikos::test::Suite suite{"drivers/fs/ext4/file"};
+  osplay::test::Suite suite{"drivers/fs/ext4/file"};
   check_sparse_partial_read(suite);
   return suite.finish();
 }

@@ -1,15 +1,15 @@
 # Shared Simulator Ethernet
 
 Tribe, Extreme and Rocket use the same UNIX-datagram Ethernet framing. Their
-interactive launchers use `/tmp/mikos-tap.sock`. Setup and launchers automatically
+interactive launchers use `/tmp/osplay-tap.sock`. Setup and launchers automatically
 select the TAP that already owns `192.168.76.1`, even if it is named `tap-extreme`
-or `tap-tribe`. If none exists, setup creates `tap-mikos`.
+or `tap-tribe`. If none exists, setup creates `tap-osplay`.
 Run only one simulator on a bridge at a time: a simulator's HELLO selects the
 peer that receives host traffic. Stop it before starting another simulator.
 Keep the bridge running between simulations.
 
 ```bash
-cd ~/mikos
+cd ~/osplay
 bash tests/network/build_tap.sh
 sudo bash tests/network/start_tap.sh --background
 python3 tests/network/tap.py rocket
@@ -34,9 +34,9 @@ not taken over: stop that bridge or select its existing socket instead.
 For example, to reuse the existing Extreme-named bridge with all three CPUs:
 
 ```bash
-export MIKOS_TAP=tap-extreme
-export MIKOS_TAP_SOCKET=/tmp/extreme-ethgig.sock
-sudo env MIKOS_TAP="$MIKOS_TAP" MIKOS_TAP_SOCKET="$MIKOS_TAP_SOCKET" \
+export OSPLAY_TAP=tap-extreme
+export OSPLAY_TAP_SOCKET=/tmp/extreme-ethgig.sock
+sudo env OSPLAY_TAP="$OSPLAY_TAP" OSPLAY_TAP_SOCKET="$OSPLAY_TAP_SOCKET" \
   bash tests/network/start_tap.sh --background
 python3 tests/network/tap.py rocket
 tests/rocket/rocket_interactive.sh --no-build
@@ -66,7 +66,7 @@ namespace (where unprivileged user namespaces are enabled):
 ```bash
 unshare -Urn bash
 # Inside this shell, use a private bridge socket:
-export MIKOS_TAP=tap-mikos MIKOS_TAP_SOCKET=/tmp/mikos-private-$$.sock
+export OSPLAY_TAP=tap-osplay OSPLAY_TAP_SOCKET=/tmp/osplay-private-$$.sock
 bash tests/network/start_tap.sh --background
 python3 tests/network/tap.py extreme
 tests/extreme/extreme_interactive.sh --no-build
@@ -84,17 +84,17 @@ local-IP conflict detection. It is not an OS simulation test.
 
 ## Shared SSH Identity
 
-All three guests listen on port 22 and authorize `build/mikos_ssh_key.pub`.
-Builds preserve an existing `build/mikos_ssh_key`; a clean build installs the
-versioned regression key from `tests/busybox/keys/mikos_ssh_key`. This is the
+All three guests listen on port 22 and authorize `build/osplay_ssh_key.pub`.
+Builds preserve an existing `build/osplay_ssh_key`; a clean build installs the
+versioned regression key from `tests/busybox/keys/osplay_ssh_key`. This is the
 shared test identity for the isolated simulation link.
 
 The converted client key has the same path for every CPU. After the guest
-prints `MIKOS:TCP_LISTEN 22`, connect from another terminal in `~/mikos`:
+prints `OSPLAY:TCP_LISTEN 22`, connect from another terminal in `~/osplay`:
 
 ```bash
 build/tests/busybox/dropbear-host/dbclient \
-  -i build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear \
+  -i build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear \
   -c none -y -y root@192.168.76.2
 ```
 

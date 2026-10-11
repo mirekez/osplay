@@ -1,8 +1,8 @@
 #pragma once
 
-#include <mikos/base.hpp>
+#include <osplay/base.hpp>
 
-namespace mikos::path {
+namespace osplay::path {
 
 inline constexpr u32 capacity = 256;
 inline constexpr u32 invalid_number = ~u32{0};
@@ -103,4 +103,4 @@ inline constexpr u32 invalid_number = ~u32{0};
   return true;
 }
 
-}  // namespace mikos::path
+}  // namespace osplay::path

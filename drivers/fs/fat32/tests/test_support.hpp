@@ -5,7 +5,7 @@
 #include <cstring>
 #include <unordered_map>
 
-namespace mikos::drivers::fs::fat32::test {
+namespace osplay::drivers::fs::fat32::test {
 
 class Device {
  public:
@@ -196,4 +196,4 @@ class Image {
   }
 };
 
-}  // namespace mikos::drivers::fs::fat32::test
+}  // namespace osplay::drivers::fs::fat32::test

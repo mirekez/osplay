@@ -59,11 +59,11 @@ then sends an IPv4 ICMP echo request and validates both reply checksums. It also
 requires these guest markers:
 
 ```text
-MIKOS:NET_IP 10.0.2.15
-MIKOS:NET_MAC 52:54:00:12:34:56
-MIKOS:ARP_REPLY
-MIKOS:ICMP_ECHO_REPLY
-MIKOS:EXIT 0
+OSPLAY:NET_IP 10.0.2.15
+OSPLAY:NET_MAC 52:54:00:12:34:56
+OSPLAY:ARP_REPLY
+OSPLAY:ICMP_ECHO_REPLY
+OSPLAY:EXIT 0
 ```
 
 The Unix-datagram backend is used because the supplied QEMU was built without
@@ -72,7 +72,7 @@ Ethernet tests without root privileges or host network configuration.
 
 ## Not supported yet
 
-MikOS implements the narrow `socket(AF_INET, SOCK_DGRAM, 0)` control descriptor
+OSplay implements the narrow `socket(AF_INET, SOCK_DGRAM, 0)` control descriptor
 and a bounded passive `SOCK_STREAM` path with bind/listen/accept, stream I/O,
 poll/select readiness, and `/proc/net/tcp` reporting. It does not yet provide
 active connect, netlink (and therefore BusyBox `ip`), DHCP, SACK,

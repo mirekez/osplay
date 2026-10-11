@@ -7,11 +7,11 @@ log="$root/build/kernel-cxx-boot.log"
 # mounting root. Exit 8 is the expected missing-root result.
 set +e
 timeout 20 "$qemu" -machine virt -m 32M -bios none -nographic \
-  -monitor none -no-reboot -kernel "$root/build/mikos-rv32.elf" >"$log" 2>&1
+  -monitor none -no-reboot -kernel "$root/build/osplay-rv32.elf" >"$log" 2>&1
 status=$?
 set -e
-if [[ $status -ne 8 ]] || ! grep -E -q '^MIKOS:KERNEL_CXX_OK$' "$log" || \
-   ! grep -E -q '^MIKOS:EXT4_ROOT_FAIL$' "$log"; then
+if [[ $status -ne 8 ]] || ! grep -E -q '^OSPLAY:KERNEL_CXX_OK$' "$log" || \
+   ! grep -E -q '^OSPLAY:EXT4_ROOT_FAIL$' "$log"; then
   cat "$log"
   echo "FAIL: kernel container boot test (exit $status)" >&2
   exit 1

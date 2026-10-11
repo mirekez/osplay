@@ -135,6 +135,6 @@ int extreme_busybox_main(int argc, char **argv) {
   if (fstat(99, &ignored) != -1 || errno != EBADF) {
     return 6;
   }
-  static const char marker[] = "MIKOS_DESCRIPTOR_METADATA_OK\n";
+  static const char marker[] = "OSPLAY_DESCRIPTOR_METADATA_OK\n";
   return write(1, marker, sizeof(marker) - 1) == sizeof(marker) - 1 ? 0 : 7;
 }

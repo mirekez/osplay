@@ -39,44 +39,44 @@ completion, and initialization failures identify the stage before shutdown.
 
 Interactive sessions use the universal TAP and print setup commands if its
 socket, host address or permanent neighbor is missing. To reuse the
-Extreme-named bridge with all three CPUs, run from `~/mikos`:
+Extreme-named bridge with all three CPUs, run from `~/osplay`:
 
 ```sh
 bash tests/network/build_tap.sh
-export MIKOS_TAP=tap-extreme
-export MIKOS_TAP_SOCKET=/tmp/extreme-ethgig.sock
-sudo env MIKOS_TAP="$MIKOS_TAP" MIKOS_TAP_SOCKET="$MIKOS_TAP_SOCKET" \
+export OSPLAY_TAP=tap-extreme
+export OSPLAY_TAP_SOCKET=/tmp/extreme-ethgig.sock
+sudo env OSPLAY_TAP="$OSPLAY_TAP" OSPLAY_TAP_SOCKET="$OSPLAY_TAP_SOCKET" \
   bash tests/network/start_tap.sh --background
 python3 tests/network/tap.py extreme
 bash tests/extreme/extreme_interactive.sh
 ```
 
-Without those exports, the defaults are `tap-mikos` and `/tmp/mikos-tap.sock`.
+Without those exports, the defaults are `tap-osplay` and `/tmp/osplay-tap.sock`.
 The shared host address is `192.168.76.1/24`. The guest initializes its
 fixed `192.168.76.2/24` address and `02:00:00:00:00:02` MAC automatically; no gateway
 or guest `ifconfig` command is required. Dropbear starts on port 22. The launcher
 prints a ping command and the complete patched-client SSH command, including the
-shared mikOS identity. Wait for `MIKOS:TCP_LISTEN 22` before connecting.
+shared OSplay identity. Wait for `OSPLAY:TCP_LISTEN 22` before connecting.
 
-Extreme, Rocket and Tribe use the same test identity: `build/mikos_ssh_key`.
-Fresh builds install the checked-in `tests/busybox/keys/mikos_ssh_key` fixture;
+Extreme, Rocket and Tribe use the same test identity: `build/osplay_ssh_key`.
+Fresh builds install the checked-in `tests/busybox/keys/osplay_ssh_key` fixture;
 existing local identities are preserved. Every guest authorizes its public key.
 The shared Dropbear-format client key is
-`build/tests/busybox/dropbear-host/mikos_ssh_key.dropbear`. Extreme refreshes it
+`build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear`. Extreme refreshes it
 and the guest's authorized keys at startup, including with `--no-build`.
 Old Extreme-specific `test_key` files are no longer used. Restart a running
 guest to pick up the shared key.
 
-Select another socket with `--tap-socket PATH` or `MIKOS_TAP_SOCKET`.
-`MIKOS_TAP` selects the host interface; printed setup commands preserve these
+Select another socket with `--tap-socket PATH` or `OSPLAY_TAP_SOCKET`.
+`OSPLAY_TAP` selects the host interface; printed setup commands preserve these
 settings through sudo. Guest IP and MAC are fixed in the image.
 Use `--no-network` for a UART-only shell.
 Old `EXTREME_*` TAP/address variables no longer select a separate link.
 `tests/extreme/start_tap.sh` delegates to the universal helper; `make extreme-tap`
 builds the shared bridge. Setup repairs an existing bridge without replacing it.
 Keep the bridge running between CPUs, with only one active simulator at a time.
-Automated ping/TCP/SSH tests use this shared link when `MIKOS_TAP`,
-`MIKOS_TAP_SOCKET` or `--tap-socket` is supplied; otherwise they create a private
+Automated ping/TCP/SSH tests use this shared link when `OSPLAY_TAP`,
+`OSPLAY_TAP_SOCKET` or `--tap-socket` is supplied; otherwise they create a private
 network namespace.
 
 The shared-key regression verifies clean installation, preservation of an existing
@@ -111,7 +111,7 @@ Extreme CPU checkout. Scripts resolve it from their location, so they also work
 when launched outside this directory. `EXTREME_CPU_HOME` remains an explicit
 override. Rootfs
 construction requires `mke2fs` and `debugfs`; it does not require a root mount.
-The downloaded Dropbear copy receives the existing mikOS test patch. Package
+The downloaded Dropbear copy receives the existing OSplay test patch. Package
 stages are cached by their build inputs and rebuild objects when those change.
 
 Userspace uses a 512-bit bus, SIMD enabled, two 32 MiB RAM banks and an MMIO bank.
@@ -149,7 +149,7 @@ can select `EXTREME_BOARD_CPP`, `EXTREME_BOARD_SV`, `EXTREME_USER_IMAGE`,
   the expected output and successful client and CPU exit status.
 
 The SSH configuration intentionally matches the Tribe test profile: the patched
-client/server use the `none` cipher and the mikOS transcript-proof test path.
+client/server use the `none` cipher and the OSplay transcript-proof test path.
 It is an interoperability regression, not production encrypted SSH. The kernel's
 existing deterministic random source is likewise suitable only for this profile.
 
@@ -166,7 +166,7 @@ matrix is available in `run_all.sh` but was not part of this validation run.
 
 CPU/compiler regressions passed with SIMD enabled (50 tests) and disabled
 (48 tests), including both simulation flows. RTL synthesis and `check -assert`
-passed, as did 95 mikOS host-test checks. Acceptance logs are under
+passed, as did 95 OSplay host-test checks. Acceptance logs are under
 `build/tests/extreme/results/userspace-<test>-c<cores>-<flow>/`.
 
 ## Native ABI and current limits
@@ -194,9 +194,9 @@ allocations have a checked 64 KiB arena per activation. These bounds are explici
 prototype limits, not a general hosted C/C++ runtime guarantee.
 # Shared TAP
 
-Interactive sessions now default to the universal `tap-mikos` bridge at
-`/tmp/mikos-tap.sock`. See [shared TAP setup](../network/TAP.md) for setup,
-checks, and reusing an existing bridge with `MIKOS_TAP`/`MIKOS_TAP_SOCKET`.
+Interactive sessions now default to the universal `tap-osplay` bridge at
+`/tmp/osplay-tap.sock`. See [shared TAP setup](../network/TAP.md) for setup,
+checks, and reusing an existing bridge with `OSPLAY_TAP`/`OSPLAY_TAP_SOCKET`.
 All three CPUs use host `192.168.76.1` and guest `192.168.76.2`.
 Rebuild older Extreme images by running the launcher without `--no-build`.
 

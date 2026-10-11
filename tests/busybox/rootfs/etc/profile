@@ -1,5 +1,5 @@
-# PID 1 sources this profile to perform MikOS boot setup. Login shells source it
+# PID 1 sources this profile to perform OSplay boot setup. Login shells source it
 # too, and must not launch a second one-connection Dropbear instance.
 if [ "$$" -eq 1 ]; then
-  . /etc/init.d/rcS mikos
+  . /etc/init.d/rcS osplay
 fi

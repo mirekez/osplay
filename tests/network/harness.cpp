@@ -192,16 +192,16 @@ int run_cases(int argc, char** argv, std::span<const Case> cases) {
 }
 }  // namespace tcp_test
 
-namespace mikos::arch {
+namespace osplay::arch {
 u64 time_ticks() { return tcp_test::now; }
-}  // namespace mikos::arch
-namespace mikos {
+}  // namespace osplay::arch
+namespace osplay {
 void uart_put(char) {}
 void uart_write(const char*, u32) {}
 void write_text(const char*) {}
 void write_u32(u32) {}
-}  // namespace mikos
-namespace mikos::drivers::net {
+}  // namespace osplay
+namespace osplay::drivers::net {
 bool initialize() { return true; }
 MacAddress mac_address() { return {{2, 0, 0, 0, 0, 2}}; }
 bool receive(Frame& frame) {
@@ -220,4 +220,4 @@ bool transmit(const u8* frame, u32 size) {
   tcp_test::record({frame, size});
   return true;
 }
-}  // namespace mikos::drivers::net
+}  // namespace osplay::drivers::net
