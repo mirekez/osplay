@@ -6,7 +6,12 @@ OSplay is an experimental, test-driven operating system with a minimal
 mechanism-only kernel, flat-memory architecture profiles, polling instead of
 ordinary device interrupts, and generated Linux syscall ABI tables.
 
-![](doc/architecture.png)
+![OSplay multi-architecture overview: shared kernel and userspace components, platform adapters, and supported CPU profiles](doc/architecture.png)
+
+The shared components serve RISC-V profiles (QEMU virt, Tribe, and Rocket)
+and the native Extreme ISA. Execution ABI, privilege, memory layout, and
+scheduling are platform-specific; Extreme uses cooperative scheduling and
+prelinked native applications rather than the RV32 trap/ELF path.
 
 Start with:
 

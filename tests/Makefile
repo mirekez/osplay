@@ -31,6 +31,21 @@ $(TEST_BINARIES): | $(KERNEL_CXX_READY)
 
 .PHONY: all test regression bridge-check fs-driver-check x86-driver-check clean
 
+LOOP_IMAGES := $(BUILD)/fixtures/loop-root.ext4 $(BUILD)/fixtures/loop.ext4 $(BUILD)/fixtures/loop.ext2
+$(LOOP_IMAGES):
+	@mkdir -p $(@D)
+	truncate -s $(if $(findstring loop-root,$@),8M,1M) $@
+	/usr/sbin/mke2fs -q -F -t $(if $(filter %.ext2,$@),ext2,ext4) -b 1024 -I 128 \
+	  -O ^has_journal,^metadata_csum,^64bit,^dir_index -E lazy_itable_init=0 $@
+
+$(BUILD)/kernel/loop_mount_test: kernel/loop_mount_test.cpp $(ROOT)/kernel/syscall.cpp \
+    $(ROOT)/drivers/fs/root.cpp $(ROOT)/kernel/pseudo_filesystem.cpp $(LOOP_IMAGES) support/test.hpp
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -O1 -ffunction-sections -fdata-sections \
+	  -fsanitize=undefined -fno-sanitize-recover=all \
+	  -DLOOP_FIXTURES='"$(BUILD)/fixtures"' -MMD -MP -MF $@.d \
+	  kernel/loop_mount_test.cpp $(ROOT)/kernel/pseudo_filesystem.cpp $(LDFLAGS) -Wl,--gc-sections -o $@
+
 all: test
 
 test: regression bridge-check fs-driver-check x86-driver-check kernel-cxx-check
@@ -54,6 +69,8 @@ $(BUILD)/kernel/standard_containers: kernel/standard_containers.cpp \
 
 regression: $(TEST_BINARIES)
 	@set -e; for test_binary in $(TEST_BINARIES); do "$$test_binary"; done
+	/usr/sbin/e2fsck -fn $(BUILD)/fixtures/result-loop.ext4
+	/usr/sbin/e2fsck -fn $(BUILD)/fixtures/result-loop.ext2
 
 bridge-check: $(BRIDGE_TEST_BINARY)
 	$< --self-test

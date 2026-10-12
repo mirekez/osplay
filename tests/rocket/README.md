@@ -40,7 +40,60 @@ boot/C++/platform-state markers; it is not a full shutdown test.
 Full userspace startup can take tens of minutes on a slow host. The test runner
 prints boot milestones; use `tail -f build/tests/rocket/ping.log` for UART output.
 
-## Interactive Ethernet
+## File-backed virtual disks
+
+OSplay now exposes `/dev/loop-control` and four `/dev/loopN` devices. A loop
+device keeps an existing regular file as its disk; it does not copy the disk
+image into a second RAM allocation. Rocket's root disk is already RAM-backed,
+so these images and their mounted contents are private to the running guest.
+
+Create, format and mount one from the guest console:
+
+```sh
+dd if=/dev/zero of=/disk.img bs=1024 count=256
+mkfs.ext2 -F /disk.img
+mkdir /disk
+mount -t ext2 -o loop /disk.img /disk
+echo hello >/disk/hello
+cat /disk/hello
+umount /disk
+mount -t ext2 -o loop,ro /disk.img /disk
+cat /disk/hello
+umount /disk
+```
+
+The same mount path accepts supported ext4 images. Writable ext4 images must
+be journal-free and without metadata checksums, matching the rootfs driver.
+Loop offsets and size limits are supported in 512-byte units; other filesystem
+types, loop encryption/direct I/O, bind/remount/lazy unmount, and backing files
+on another loop mount are explicitly unsupported. Attached backing files are
+pinned against write/truncate/unlink/rename until detached. Ordinary unmount
+returns `EBUSY` for open mounted files, working directories, and child mounts.
+`mount -o loop` enables autoclear, so successful unmount releases its device
+once the last loop descriptor closes. `losetup` attachments remain until
+`losetup -d /dev/loopN`.
+New ext2 files support direct and single-indirect blocks; double/triple-indirect
+mutations are rejected before removing directory entries or changing inodes.
+
+The special regression runs on real Rocket RTL, creates/formats its image in
+the guest, checks writes/rename, open-fd and cwd busy failures, read-only
+remount, persistence, repeated mounting, removal, and clean HTIF shutdown:
+
+```sh
+tests/rocket/.test_ramdisk.sh --build  # build simulator/kernel, then test
+tests/rocket/.test_ramdisk.sh          # reuse existing build
+make rocket-ramdisk-test              # rebuild kernel, then test
+```
+
+It needs no host loop device, root mount or sudo. UART output is saved to
+`build/tests/rocket/ramdisk.log`; `ROCKET_TIMEOUT` sets its wall-time limit
+(default 7200 seconds), and `ROCKET_CYCLES` sets the simulator cycle limit.
+This runner rebuilds a dedicated `osplay-rocket-ramdisk-rv32.elf` with the same
+kernel and drivers but a non-login interactive shell: SSH startup is skipped
+only for this regression. Its 64 KiB image keeps RTL execution bounded. The
+normal Rocket console still boots its usual login shell and Dropbear server.
+
+## Interactive Ethernet setup
 
 ```bash
 bash tests/network/build_tap.sh

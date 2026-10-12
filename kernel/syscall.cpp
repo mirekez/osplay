@@ -6,6 +6,7 @@
 #include <osplay/kernel.hpp>
 #include <osplay/abi/riscv32.hpp>
 #include <osplay/abi/socket.hpp>
+#include <osplay/abi/loop.hpp>
 #include <osplay/process/model.hpp>
 #include <osplay/process/pipe.hpp>
 #include <osplay/process/signal.hpp>
@@ -13,6 +14,7 @@
 #include <osplay/process/pty.hpp>
 #include <osplay/memory/boot_array.hpp>
 #include <osplay/io/scatter_write.hpp>
+#include <cstring>
 
 extern "C" void* memset(void*, int, osplay::usize);
 extern "C" void* memcpy(void*, const void*, osplay::usize);
@@ -524,6 +526,9 @@ struct Node {
     network_socket,
     pipe,
     pty,
+    loop_device,
+    loop_control,
+    zero_device,
   };
 
   static constexpr Kind none = Kind::none;
@@ -534,11 +539,15 @@ struct Node {
   static constexpr Kind network_socket = Kind::network_socket;
   static constexpr Kind pipe = Kind::pipe;
   static constexpr Kind pty = Kind::pty;
+  static constexpr Kind loop_device = Kind::loop_device;
+  static constexpr Kind loop_control = Kind::loop_control;
+  static constexpr Kind zero_device = Kind::zero_device;
 
   Kind kind{Kind::none};
   drivers::fs::root::Node file{};
   PseudoFilesystem::Node pseudo_node{PseudoFilesystem::Node::none};
   u8 pty_number{0xff};
+  u8 loop_number{0xff};
 
   constexpr Node() = default;
   constexpr Node(Kind value) : kind(value) {}
@@ -660,6 +669,12 @@ process_model::PtyTable<4> ptys{};
 }
 
 [[nodiscard]] bool retain_descriptor(const Descriptor& descriptor) {
+  if (descriptor.node == Node::filesystem) {
+    return drivers::fs::root::retain(descriptor.node.file) == drivers::fs::Error::none;
+  }
+  if (descriptor.node == Node::loop_device) {
+    return drivers::fs::root::loop_open(descriptor.node.loop_number) == drivers::fs::Error::none;
+  }
   if (descriptor.node == Node::network_socket) {
     return network::socket_retain(descriptor.socket) ==
            network::SocketResult::success;
@@ -676,7 +691,11 @@ process_model::PtyTable<4> ptys{};
 }
 
 void release_descriptor(Descriptor& descriptor) {
-  if (descriptor.node == Node::network_socket) {
+  if (descriptor.node == Node::filesystem) {
+    drivers::fs::root::release(descriptor.node.file);
+  } else if (descriptor.node == Node::loop_device) {
+    drivers::fs::root::loop_close(descriptor.node.loop_number);
+  } else if (descriptor.node == Node::network_socket) {
     static_cast<void>(network::socket_close(descriptor.socket));
   } else if (descriptor.node == Node::pipe) {
     static_cast<void>(pipes.release(descriptor.pipe, descriptor.pipe_end));
@@ -1466,6 +1485,14 @@ void discard_parked_session() {
   if (!canonicalize_path(address, base, path, 256)) {
     return Node::none;
   }
+  if (text_is(path, "/dev/loop-control")) return Node{Node::loop_control};
+  if (text_is(path, "/dev/zero")) return Node{Node::zero_device};
+  const u32 loop_number = path::numbered_suffix(path, "/dev/loop", drivers::fs::root::loop_capacity);
+  if (loop_number != path::invalid_number) {
+    Node node{Node::loop_device};
+    node.loop_number = static_cast<u8>(loop_number);
+    return node;
+  }
   const u32 pty_number =
       path::numbered_suffix(path, "/dev/pts/", 4);
   if (pty_number != path::invalid_number &&
@@ -1529,7 +1556,17 @@ void discard_parked_session() {
     case Error::invalid_argument:
       return error(Errno::invalid_argument);
     case Error::unsupported:
+    case Error::read_only:
       return error(Errno::read_only_filesystem);
+    case Error::busy:
+      return error(Errno::busy);
+    case Error::cross_device:
+      return error(Errno::cross_device);
+    case Error::is_directory:
+      return error(Errno::is_directory);
+    case Error::invalid_format:
+    case Error::out_of_bounds:
+      return error(Errno::invalid_argument);
     default:
       return error(Errno::io);
   }
@@ -1644,17 +1681,15 @@ void discard_parked_session() {
     if (PseudoFilesystem::mounted(canonical)) {
       return error(Errno::read_only_filesystem);
     }
-    if (drivers::fs::root::create(canonical, nullptr, 0) !=
-        drivers::fs::Error::none) {
-      return error(Errno::io);
-    }
+    const auto creation = drivers::fs::root::create(canonical, nullptr, 0);
+    if (creation != drivers::fs::Error::none) return filesystem_error(creation);
     const auto created = drivers::fs::root::lookup(canonical);
     if (created) {
       node = Node{(*created)};
     }
   } else if (node != Node::none && (flags & create) != 0 &&
              (flags & exclusive) != 0) {
-    return error(Errno::access_denied);
+    return error(Errno::file_exists);
   }
   if (node == Node::none) {
     return error(Errno::no_entry);
@@ -1663,17 +1698,17 @@ void discard_parked_session() {
   if ((flags & require_directory) != 0 && !directory(node)) {
     return error(Errno::not_directory);
   }
-  if ((flags & truncate) != 0) {
+  if (node == Node::filesystem && (flags & access_mode) != 0 &&
+      drivers::fs::root::read_only(node.file)) return error(Errno::read_only_filesystem);
+  if ((flags & truncate) != 0 && node != Node::loop_device && node != Node::zero_device) {
     if (node == Node::pseudo) {
       return error(Errno::read_only_filesystem);
     }
     if (node != Node::filesystem || directory(node)) {
       return error(Errno::is_directory);
     }
-    if (drivers::fs::root::truncate(node.file, 0) !=
-        drivers::fs::Error::none) {
-      return error(Errno::io);
-    }
+    const auto truncated = drivers::fs::root::truncate(node.file, 0);
+    if (truncated != drivers::fs::Error::none) return filesystem_error(truncated);
   }
   for (u32 descriptor = 3; descriptor < 16; ++descriptor) {
     auto& slot = descriptors[descriptor - 3];
@@ -1682,6 +1717,10 @@ void discard_parked_session() {
       slot.offset = (flags & append) != 0 ? node_size(node) : 0;
       slot.flags = flags & (access_mode | append);
       memcpy(slot.path, canonical, sizeof(canonical));
+      if (!retain_descriptor(slot)) {
+        slot = {};
+        return error(Errno::no_device);
+      }
       return static_cast<i32>(descriptor);
     }
   }
@@ -2109,7 +2148,10 @@ void discard_parked_session() {
     return error(Errno::invalid_argument);
   }
   Descriptor source{};
-  if (old_descriptor == 0) {
+  if (const auto* selected = descriptor_slot(old_descriptor);
+      selected != nullptr && selected->node != Node::none) {
+    source = *selected;
+  } else if (old_descriptor == 0) {
     source.node = Node::standard_input;
   } else if (old_descriptor == 1 || old_descriptor == 2) {
     source.node = Node::standard_output;
@@ -2118,6 +2160,8 @@ void discard_parked_session() {
   } else {
     return error(Errno::bad_file_descriptor);
   }
+  if ((source.node == Node::filesystem || source.node == Node::loop_device) &&
+      !retain_descriptor(source)) return error(Errno::bad_file_descriptor);
   if (new_descriptor < 3) {
     if (source.node == Node::network_socket &&
         network::socket_retain(source.socket) !=
@@ -2261,9 +2305,7 @@ void discard_parked_session() {
   if (node == Node::pseudo) {
     return error(Errno::read_only_filesystem);
   }
-  return drivers::fs::root::remove(canonical) == drivers::fs::Error::none
-             ? 0
-             : error(Errno::io);
+  return filesystem_error(drivers::fs::root::remove(canonical));
 }
 
 [[nodiscard]] i32 renameat(u32 old_directory, u32 old_path,
@@ -2296,10 +2338,7 @@ void discard_parked_session() {
   if (PseudoFilesystem::mounted(destination)) {
     return error(Errno::read_only_filesystem);
   }
-  return drivers::fs::root::move(source, destination) ==
-                 drivers::fs::Error::none
-             ? 0
-             : error(Errno::io);
+  return filesystem_error(drivers::fs::root::move(source, destination));
 }
 
 [[nodiscard]] i32 ftruncate(u32 descriptor, u32 size) {
@@ -2310,10 +2349,7 @@ void discard_parked_session() {
   if (slot.node != Node::filesystem || (slot.flags & 3) == 0) {
     return error(Errno::bad_file_descriptor);
   }
-  return drivers::fs::root::truncate(slot.node.file, size) ==
-                 drivers::fs::Error::none
-             ? 0
-             : error(Errno::io);
+  return filesystem_error(drivers::fs::root::truncate(slot.node.file, size));
 }
 
 [[nodiscard]] i32 truncate_path(u32 path_address, u32 size) {
@@ -2328,13 +2364,12 @@ void discard_parked_session() {
   if (node != Node::filesystem || directory(node)) {
     return error(Errno::is_directory);
   }
-  return drivers::fs::root::truncate(node.file, size) ==
-                 drivers::fs::Error::none
-             ? 0
-             : error(Errno::io);
+  return filesystem_error(drivers::fs::root::truncate(node.file, size));
 }
 
 [[nodiscard]] const char* node_contents(Node node) {
+  if (node == Node::pseudo && node.pseudo_node == PseudoFilesystem::Node::proc_mounts)
+    return drivers::fs::root::mount_table();
   if (node == Node::pseudo &&
       node.pseudo_node == PseudoFilesystem::Node::proc_net_tcp) {
     return network::tcp_table();
@@ -2361,12 +2396,18 @@ void discard_parked_session() {
 }
 
 [[nodiscard]] u32 node_size(Node node) {
+  if (node == Node::loop_device) {
+    const u64 size = drivers::fs::root::loop_size(node.loop_number);
+    return size > 0xffffffffu ? 0xffffffffu : static_cast<u32>(size);
+  }
   if (node == Node::filesystem) {
     return node.file.size > 0xffffffffu
                ? 0xffffffffu
                : static_cast<u32>(node.file.size);
   }
   if (node == Node::pseudo) {
+    if (node.pseudo_node == PseudoFilesystem::Node::proc_mounts)
+      return text_size(drivers::fs::root::mount_table());
     if (node.pseudo_node == PseudoFilesystem::Node::proc_net_tcp) {
       return text_size(network::tcp_table());
     }
@@ -2398,6 +2439,24 @@ void discard_parked_session() {
   }
   if (!user_memory.contains(address, size)) {
     return error(Errno::bad_address);
+  }
+  if (slot.node == Node::zero_device) {
+    if ((slot.flags & 3) == 1) return error(Errno::bad_file_descriptor);
+    memset(reinterpret_cast<void*>(address), 0, size);
+    return static_cast<i32>(size);
+  }
+  if (slot.node == Node::loop_device) {
+    if ((slot.flags & 3) == 1) return error(Errno::bad_file_descriptor);
+    if (!drivers::fs::root::loop_status(slot.node.loop_number))
+      return error(Errno::no_device_address);
+    const u32 length = node_size(slot.node);
+    if (slot.offset >= length || size == 0) return 0;
+    const u32 count = slot.offset >= length ? 0 : std::min(size, length - slot.offset);
+    const auto result = drivers::fs::root::loop_read(slot.node.loop_number, slot.offset,
+                                                    reinterpret_cast<u8*>(address), count);
+    if (!result) return filesystem_error(result.error());
+    slot.offset += *result;
+    return static_cast<i32>(*result);
   }
   if (slot.node == Node::network_socket) {
     if (size == 0) {
@@ -2569,6 +2628,7 @@ struct Ext4DirectoryState {
   u32 total;
   bool root;
   bool full;
+  bool dev{};
 };
 
 [[nodiscard]] bool emit_ext4_directory_entry(
@@ -2580,6 +2640,12 @@ struct Ext4DirectoryState {
   }
   if (state.root &&
       (entry.name.equals("proc") || entry.name.equals("sys"))) {
+    state.next = index + 1;
+    return true;
+  }
+  if (state.dev && (entry.name.equals("zero") || entry.name.equals("loop-control") ||
+      entry.name.equals("loop0") || entry.name.equals("loop1") ||
+      entry.name.equals("loop2") || entry.name.equals("loop3"))) {
     state.next = index + 1;
     return true;
   }
@@ -2633,9 +2699,10 @@ struct Ext4DirectoryState {
       return 0;
     }
     const bool root = text_is(slot.path, "/");
+    const bool dev = text_is(slot.path, "/dev");
     if (slot.offset < overlay_start) {
       Ext4DirectoryState state{address, size, slot.offset, 0, slot.offset,
-                               0, root, false};
+                               0, root, false, dev};
       const auto result = drivers::fs::root::for_each(
           slot.node.file, &state, emit_ext4_directory_entry);
       if (result != drivers::fs::Error::none) {
@@ -2646,7 +2713,7 @@ struct Ext4DirectoryState {
       if (state.full) {
         return static_cast<i32>(total);
       }
-      slot.offset = root ? overlay_start : end_of_directory;
+      slot.offset = root || dev ? overlay_start : end_of_directory;
     }
     if (root) {
       static constexpr struct {
@@ -2669,6 +2736,18 @@ struct Ext4DirectoryState {
       if (slot.offset - overlay_start == 2) {
         slot.offset = end_of_directory;
       }
+    }
+    if (dev) {
+      static constexpr const char* names[] = {"zero", "loop-control", "loop0", "loop1", "loop2", "loop3"};
+      while (slot.offset - overlay_start < 6) {
+        const u32 index = slot.offset - overlay_start;
+        const i32 emitted = emit_dirent(address + total, size - total, 0x10000u + index,
+                                       slot.offset + 1, index < 2 ? 2 : 6, names[index]);
+        if (emitted == 0) break;
+        total += static_cast<u32>(emitted);
+        ++slot.offset;
+      }
+      if (slot.offset - overlay_start == 6) slot.offset = end_of_directory;
     }
     return static_cast<i32>(total);
   }
@@ -2713,6 +2792,9 @@ struct [[gnu::packed]] Stat64 {
 static_assert(sizeof(Stat64) == 128);
 
 [[nodiscard]] u32 node_mode(Node node) {
+  if (node == Node::zero_device) return 0020000 | 0666;
+  if (node == Node::loop_device) return 0060000 | 0600;
+  if (node == Node::loop_control) return 0020000 | 0600;
   if (node == Node::none || node == Node::standard_input ||
       node == Node::standard_output || node == Node::pty) {
     return 0020000 | (node.pty_number == 0xff ? 0666 : ptys.mode(node.pty_number));
@@ -2741,6 +2823,10 @@ static_assert(sizeof(Stat64) == 128);
                  ? PseudoFilesystem::inode(node.pseudo_node)
                  : static_cast<u32>(node.kind));
   value.mode = node_mode(node);
+  if (node == Node::loop_device) value.special_device = (7u << 8) | node.loop_number;
+  if (node == Node::loop_control) value.special_device = (10u << 8) | 237;
+  if (node == Node::zero_device) value.special_device = (1u << 8) | 5;
+  if (node == Node::filesystem) value.device = node.file.filesystem + 1;
   if (node == Node::pty) {
     value.uid = ptys.uid(node.pty_number);
     value.gid = ptys.gid(node.pty_number);
@@ -2792,6 +2878,16 @@ static_assert(sizeof(Statx) == 256);
   // fstat64() on the open slave and statx() for the /dev/pts/N pathname, then
   // rejects the name unless both describe the same character device.
   value.mode = static_cast<u16>(node_mode(node));
+  const u32 major = node == Node::loop_device ? 7 : node == Node::loop_control ? 10
+                    : node == Node::zero_device ? 1 : 0;
+  const u32 minor = node == Node::loop_device ? node.loop_number : node == Node::loop_control ? 237
+                    : node == Node::zero_device ? 5 : 0;
+  memcpy(value.remainder + 64, &major, sizeof(major));
+  memcpy(value.remainder + 68, &minor, sizeof(minor));
+  if (node == Node::filesystem) {
+    const u32 device = node.file.filesystem + 1;
+    memcpy(value.remainder + 76, &device, sizeof(device));
+  }
   if (node == Node::pty) {
     value.uid = ptys.uid(node.pty_number);
     value.gid = ptys.gid(node.pty_number);
@@ -3775,6 +3871,17 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
     uart_write(reinterpret_cast<const char*>(address), size);
     return static_cast<i32>(size);
   }
+  if (slot.node == Node::zero_device) {
+    return (slot.flags & 3) == 0 ? error(Errno::bad_file_descriptor) : static_cast<i32>(size);
+  }
+  if (slot.node == Node::loop_device) {
+    if ((slot.flags & 3) == 0) return error(Errno::bad_file_descriptor);
+    const auto result = drivers::fs::root::loop_write(slot.node.loop_number, slot.offset,
+        reinterpret_cast<const u8*>(address), size);
+    if (!result) return filesystem_error(result.error());
+    slot.offset += *result;
+    return static_cast<i32>(*result);
+  }
   if (slot.node == Node::network_socket) {
     if (size == 0) {
       return 0;
@@ -3898,7 +4005,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   const auto result = drivers::fs::root::write(
       slot.node.file, slot.offset, reinterpret_cast<const u8*>(address), size);
   if (!result) {
-    return error(Errno::io);
+    return filesystem_error(result.error());
   }
   slot.offset += (*result);
   return static_cast<i32>((*result));
@@ -4234,7 +4341,142 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return error(Errno::operation_not_supported);
 }
 
+// Loop ABI decoding is confined to the syscall adapter.
+[[nodiscard]] i32 seek_file(u32 fd, u32 high, u32 low, u32 result_address, u32 whence) {
+  auto* slot = descriptor_slot(fd);
+  if (!slot || slot->node == Node::none) return error(Errno::bad_file_descriptor);
+  if (slot->node != Node::filesystem && slot->node != Node::loop_device &&
+      slot->node != Node::pseudo) return error(Errno::invalid_argument);
+  if (!user_memory.contains(result_address, sizeof(u64))) return error(Errno::bad_address);
+  if (whence > 2) return error(Errno::invalid_argument);
+  const u64 raw = (static_cast<u64>(high) << 32) | low;
+  const long long offset = static_cast<long long>(raw);
+  const long long base = whence == 0 ? 0 : whence == 1 ? slot->offset : node_size(slot->node);
+  if (offset < -base || offset > static_cast<long long>(0xffffffffu) - base)
+    return error(Errno::invalid_argument);
+  const u64 position = static_cast<u64>(base + offset);
+  slot->offset = static_cast<u32>(position);
+  memcpy(reinterpret_cast<void*>(result_address), &position, sizeof(position));
+  return 0;
+}
+
+[[nodiscard]] i32 loop_error(drivers::fs::Error value) {
+  if (value == drivers::fs::Error::not_found) return error(Errno::no_device_address);
+  if (value == drivers::fs::Error::unsupported) return error(Errno::operation_not_supported);
+  return filesystem_error(value);
+}
+[[nodiscard]] i32 loop_ioctl(Descriptor& slot, u32 request, u32 address) {
+  namespace disk = drivers::fs::root;
+  namespace loop = abi::loop;
+  if (slot.node == Node::loop_control) {
+    if (request != loop::get_free) return error(Errno::invalid_argument);
+    const i32 index = disk::free_loop();
+    return index < 0 ? error(Errno::no_space) : index;
+  }
+  const u32 index = slot.node.loop_number;
+  if (request == loop::clear_fd) return loop_error(disk::loop_detach(index));
+  if (request == 0x1268 || request == 0x1260 || request == 0x80081272u) {
+    const u32 size = request == 0x80081272u ? 8 : 4;
+    if (!user_memory.contains(address, size)) return error(Errno::bad_address);
+    if (!disk::loop_status(index)) return error(Errno::no_device_address);
+    const u64 value = request == 0x1268 ? 512 : request == 0x1260
+        ? disk::loop_size(index) / 512 : disk::loop_size(index);
+    memcpy(reinterpret_cast<void*>(address), &value, size);
+    return 0;
+  }
+  if (request == loop::get_status64) {
+    if (!user_memory.contains(address, sizeof(loop::Info64))) return error(Errno::bad_address);
+    const auto status = disk::loop_status(index);
+    if (!status) return loop_error(status.error());
+    loop::Info64 info{};
+    info.device = status->backing.filesystem + 1;
+    info.inode = status->backing.inode;
+    info.rdevice = (7u << 8) | index;
+    info.number = index;
+    info.offset = status->offset;
+    info.size_limit = status->size_limit;
+    info.flags = status->flags;
+    memcpy(info.file_name, status->name, sizeof(info.file_name));
+    memcpy(reinterpret_cast<void*>(address), &info, sizeof(info));
+    return 0;
+  }
+  loop::Info64 info{};
+  u32 backing_fd = address;
+  if (request == loop::configure) {
+    if (!user_memory.contains(address, sizeof(loop::Config))) return error(Errno::bad_address);
+    loop::Config config{};
+    memcpy(&config, reinterpret_cast<const void*>(address), sizeof(config));
+    for (u64 reserved : config.reserved) if (reserved != 0) return error(Errno::invalid_argument);
+    if (config.block_size != 0 && config.block_size != 512) return error(Errno::invalid_argument);
+    backing_fd = config.fd;
+    info = config.info;
+  } else if (request == loop::set_status64) {
+    if (!user_memory.contains(address, sizeof(info))) return error(Errno::bad_address);
+    memcpy(&info, reinterpret_cast<const void*>(address), sizeof(info));
+  } else if (request != loop::set_fd) {
+    return error(Errno::not_a_tty);
+  }
+  if (info.encrypt_type != 0 || info.encrypt_key_size != 0)
+    return error(Errno::operation_not_supported);
+  if ((info.flags & ~(loop::read_only | loop::autoclear)) != 0 ||
+      info.offset % 512 != 0 || info.size_limit % 512 != 0)
+    return error(Errno::invalid_argument);
+  if (request != loop::set_status64) {
+    const auto* backing = descriptor_slot(backing_fd);
+    if (!backing || backing->node == Node::none) return error(Errno::bad_file_descriptor);
+    if (backing->node != Node::filesystem || backing->node.file.directory())
+      return error(Errno::invalid_argument);
+    if ((backing->flags & 3) == 1) return error(Errno::bad_file_descriptor);
+    if (info.offset > backing->node.file.size || backing->node.file.size - info.offset < 512)
+      return error(Errno::invalid_argument);
+    const auto attached = disk::loop_attach(index, backing->node.file,
+                                            (backing->flags & 3) == 2 && (slot.flags & 3) == 2);
+    if (attached != drivers::fs::Error::none) return loop_error(attached);
+    if (request == loop::set_fd) return 0;
+  }
+  return loop_error(disk::loop_configure(index, info.offset, info.size_limit, info.flags,
+                                         reinterpret_cast<const char*>(info.file_name)));
+}
+[[nodiscard]] i32 mount_filesystem(u32 source_address, u32 target_address,
+                                   u32 type_address, u32 flags, u32 data_address) {
+  char source[path::capacity]{}, target[path::capacity]{}, type[16]{}, data[256]{};
+  if (!copy_user_string(type_address, type, sizeof(type)) ||
+      !canonicalize_path(source_address, process.current_directory, source, sizeof(source)) ||
+      !canonicalize_path(target_address, process.current_directory, target, sizeof(target)) ||
+      (data_address && !copy_user_string(data_address, data, sizeof(data))))
+    return error(Errno::bad_address);
+  constexpr u32 supported = 1 | 16 | 128 | 1024 | 2048 | 32768 | (1u << 21);
+  if ((flags & ~supported) != 0 || data[0] != '\0') return error(Errno::invalid_argument);
+  if (!text_is(type, "ext4") && !text_is(type, "ext2")) return error(Errno::no_device);
+  if (PseudoFilesystem::mounted(target)) return error(Errno::busy);
+  const u32 index = path::numbered_suffix(source, "/dev/loop", drivers::fs::root::loop_capacity);
+  if (index == path::invalid_number) return error(Errno::no_device);
+  return filesystem_error(drivers::fs::root::mount_loop(index, target, (flags & 1) != 0, type));
+}
+[[nodiscard]] i32 unmount_filesystem(u32 target_address, u32 flags) {
+  char target[path::capacity]{};
+  if (!canonicalize_path(target_address, process.current_directory, target, sizeof(target)))
+    return error(Errno::bad_address);
+  if (flags != 0) return error(Errno::invalid_argument);
+  const auto inside = [&](const char* cwd) {
+    const usize size = std::strlen(target);
+    return std::strncmp(cwd, target, size) == 0 && (cwd[size] == '\0' || cwd[size] == '/');
+  };
+  if (inside(process.current_directory) ||
+      (parent.active && inside(parent.current_directory)) ||
+      (background.used && inside(background.current_directory)) ||
+      (interactive_child.used && inside(interactive_child.current_directory)) ||
+      (interactive_parent.active && inside(interactive_parent.current_directory)))
+    return error(Errno::busy);
+  for (u32 i = 0; i < nested_ancestor_depth; ++i)
+    if (inside(nested_ancestors[i].current_directory)) return error(Errno::busy);
+  return filesystem_error(drivers::fs::root::unmount(target));
+}
+
 [[nodiscard]] i32 ioctl(u32 descriptor, u32 request, u32 address) {
+  if (auto* slot = descriptor_slot(descriptor); slot != nullptr &&
+      (slot->node == Node::loop_device || slot->node == Node::loop_control))
+    return loop_ioctl(*slot, request, address);
 #if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
   if (descriptor <= 2 && standard_redirects[descriptor].node == Node::none) {
     return uart_ioctl(descriptor, request, address);
@@ -4456,6 +4698,10 @@ i32 dispatch_syscall(TrapFrame& frame) {
       return fchownat(a0, a1, a2, a3, a4);
     case Syscall::openat:
       return openat(a0, a1, a2);
+    case Syscall::mount:
+      return mount_filesystem(a0, a1, a2, a3, a4);
+    case Syscall::umount2:
+      return unmount_filesystem(a0, a1);
     case Syscall::close:
       return close(a0);
     case Syscall::pipe2:
@@ -4463,12 +4709,7 @@ i32 dispatch_syscall(TrapFrame& frame) {
     case Syscall::getdents64:
       return getdents64(a0, a1, a2);
     case Syscall::lseek:
-      if (a0 < 3 || a0 >= 16 ||
-          descriptors[a0 - 3].node == Node::none) {
-        return error(Errno::bad_file_descriptor);
-      }
-      descriptors[a0 - 3].offset = a1;
-      return static_cast<i32>(a1);
+      return seek_file(a0, a1, a2, a3, a4);
     case Syscall::exit:
     case Syscall::exit_group:
       if (resume_after_child_exit(frame, a0)) {

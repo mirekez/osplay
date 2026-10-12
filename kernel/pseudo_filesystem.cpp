@@ -263,6 +263,7 @@ const char* Filesystem::contents(Node node) {
       "nodev\tproc\n"
       "nodev\tsysfs\n"
       "\text4\n"
+      "\text2\n"
       "\tvfat\n";
   static constexpr const char mounts[] =
       "/dev/root / ext4 rw 0 0\n"

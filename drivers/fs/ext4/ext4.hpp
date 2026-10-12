@@ -832,11 +832,16 @@ class Volume {
     if (size != 0) {
       return Error::unsupported;
     }
+    if (!release_supported(file)) return Error::unsupported;
     Node old = file;
     file.size = 0;
     file.allocated_sectors = 0;
-    file.block_data[2] = 0;
-    file.block_data[3] = 0;
+    if ((file.flags & detail::inode_extents) != 0) {
+      file.block_data[2] = 0;
+      file.block_data[3] = 0;
+    } else {
+      zero_bytes(file.block_data, sizeof(file.block_data));
+    }
     Error error = persist_inode(file);
     if (error != Error::none || !device_->flush()) {
       return error == Error::none ? Error::io : error;
@@ -1000,6 +1005,7 @@ class Volume {
     if (file->directory()) {
       return Error::is_directory;
     }
+    if (!release_supported(*file)) return Error::unsupported;
     error = erase_directory_entry(parent, file->directory_entry_offset);
     if (error != Error::none || !device_->flush()) {
       return error == Error::none ? Error::io : error;
@@ -1170,11 +1176,14 @@ class Volume {
     node.inode = inode;
     node.mode = mode;
     node.links = 1;
-    node.flags = detail::inode_extents;
+    node.flags = (geometry_.incompatible_features & detail::incompat_extents)
+                     ? detail::inode_extents : 0;
     node.type = type;
-    node.block_data[0] = static_cast<u8>(detail::extent_magic);
-    node.block_data[1] = static_cast<u8>(detail::extent_magic >> 8);
-    node.block_data[4] = 4;
+    if (node.flags != 0) {
+      node.block_data[0] = static_cast<u8>(detail::extent_magic);
+      node.block_data[1] = static_cast<u8>(detail::extent_magic >> 8);
+      node.block_data[4] = 4;
+    }
     const u32 group = (inode - 1) / geometry_.inodes_per_group;
     const u32 index = (inode - 1) % geometry_.inodes_per_group;
     GroupDescriptor descriptor{};
@@ -1219,7 +1228,44 @@ class Volume {
                        geometry_.inode_size);
   }
 
+  [[nodiscard]] bool release_supported(const Node& node) const {
+    return (node.flags & detail::inode_extents) != 0
+        ? little_u16(node.block_data) == detail::extent_magic &&
+          little_u16(node.block_data + 6) == 0 && little_u16(node.block_data + 2) <= 4
+        : little_u32(node.block_data + 52) == 0 && little_u32(node.block_data + 56) == 0;
+  }
+
   [[nodiscard]] Error append_extent(Node& node, u32 logical, u64 physical) {
+    if ((node.flags & detail::inode_extents) == 0) {
+      // ext2 images made by BusyBox use direct/single-indirect pointers, not
+      // extent inodes. Never silently turn them into an invalid ext4 image.
+      if (physical > 0xffffffffu || logical >= 12 + geometry_.block_size / 4)
+        return Error::unsupported;
+      const auto put = [](u8* where, u32 value) {
+        for (u32 byte = 0; byte < 4; ++byte) where[byte] = static_cast<u8>(value >> (byte * 8));
+      };
+      if (logical < 12) {
+        put(node.block_data + logical * 4, static_cast<u32>(physical));
+        return Error::none;
+      }
+      u32 indirect = little_u32(node.block_data + 48);
+      if (indirect == 0) {
+        const auto allocated = allocate_block();
+        if (!allocated) return allocated.error();
+        if (*allocated > 0xffffffffu) {
+          (void)release_block(*allocated);
+          return Error::unsupported;
+        }
+        indirect = static_cast<u32>(*allocated);
+        put(node.block_data + 48, indirect);
+        node.allocated_sectors += geometry_.block_size / 512;
+      }
+      Error error = read_physical_block(indirect, block_.data());
+      if (error != Error::none) return error;
+      put(block_.data() + (logical - 12) * 4, static_cast<u32>(physical));
+      return write_exact(*device_, static_cast<u64>(indirect) * geometry_.block_size,
+                         block_.data(), geometry_.block_size);
+    }
     u8* root = node.block_data;
     if (little_u16(root) != detail::extent_magic || little_u16(root + 6) != 0) {
       return Error::unsupported;
@@ -1286,6 +1332,34 @@ class Volume {
   template <typename D = Device>
     requires WritableDevice<D>
   [[nodiscard]] Error release_file_blocks(Node& node) {
+    if ((node.flags & detail::inode_extents) == 0) {
+      if (little_u32(node.block_data + 52) != 0 || little_u32(node.block_data + 56) != 0)
+        return Error::unsupported;
+      for (u32 index = 0; index < 12; ++index) {
+        const u32 block = little_u32(node.block_data + index * 4);
+        if (block != 0) {
+          const Error error = release_block(block);
+          if (error != Error::none) return error;
+        }
+      }
+      const u32 indirect = little_u32(node.block_data + 48);
+      if (indirect != 0) {
+        Error error = read_physical_block(indirect, directory_block_.data());
+        if (error != Error::none) return error;
+        // release_block() reuses both scratch buffers. Snapshot the pointer
+        // block before freeing any entry, or all subsequent entries are lost.
+        std::array<u32, 4096 / 4> pointers{};
+        for (u32 offset = 0; offset < geometry_.block_size; offset += 4) {
+          pointers[offset / 4] = little_u32(directory_block_.data() + offset);
+        }
+        for (u32 offset = 0; offset < geometry_.block_size; offset += 4) {
+          const u32 block = pointers[offset / 4];
+          if (block != 0 && (error = release_block(block)) != Error::none) return error;
+        }
+        return release_block(indirect);
+      }
+      return Error::none;
+    }
     if ((node.flags & detail::inode_extents) == 0 ||
         little_u16(node.block_data) != detail::extent_magic ||
         little_u16(node.block_data + 6) != 0) {

@@ -58,13 +58,13 @@ def echo_ok(frame):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("boot", "ping", "process"))
+    parser.add_argument("mode", choices=("boot", "ping", "process", "ramdisk"))
     args = parser.parse_args()
     out = ROOT / "build/tests/rocket"
     out.mkdir(parents=True, exist_ok=True)
     log_path = out / (args.mode + ".log")
     started = time.monotonic()
-    default_timeout = "7200" if args.mode == "process" else "3600"
+    default_timeout = "7200" if args.mode in ("process", "ramdisk") else "3600"
     deadline = started + float(os.environ.get("ROCKET_TIMEOUT", default_timeout))
     with tempfile.TemporaryDirectory(prefix="osplay-rocket-") as runtime, \
             socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as peer, \
@@ -111,7 +111,10 @@ def main():
                                 print("PASS: real Rocket DMA ICMP reply, 512 payload bytes and checksums", flush=True)
                 for marker in ("OSPLAY:BOOT", "OSPLAY:KERNEL_CXX_OK", "OSPLAY:EXT4_ROOT_OK",
                                "OSPLAY:BUSYBOX_ENTRY", "OSPLAY:DROPBEAR_ENTRY", "OSPLAY:TCP_LISTEN 22",
-                               "ROCKET_PROCESS_OK"):
+                               "OSPLAY_SSH_NET_CONFIG_START", "OSPLAY_SSH_NET_CONFIG_DONE",
+                               "OSPLAY_SSH_DROPBEAR_START",
+                               "ROCKET_PROCESS_OK", "ROCKET_RAMDISK_FORMAT_OK",
+                               "ROCKET_RAMDISK_UNMOUNT_OK", "ROCKET_RAMDISK_OK"):
                     if marker + "\n" in text and marker not in reported:
                         reported.add(marker)
                         print(f"[{time.monotonic() - started:.1f}s] {marker}", flush=True)
@@ -132,9 +135,32 @@ def main():
                     except (BlockingIOError, ConnectionRefusedError, FileNotFoundError):
                         pass
                     next_packet = time.monotonic() + 30
-                ready = "/ # " in text and (args.mode == "process" or echo)
+                ready = "/ # " in text and (args.mode in ("process", "ramdisk") or echo)
                 if ready and not sent_command:
-                    if args.mode == "process":
+                    if args.mode == "ramdisk":
+                        command = (
+                            "set -e; mkdir /ramdisk /ramdisk-sibling; "
+                            "dd if=/dev/zero of=/ramdisk.img bs=1024 count=64; "
+                            "mkfs.ext2 -F /ramdisk.img; echo ROCKET_RAMDISK_FORMAT_OK; "
+                            "mount -t ext2 -o loop /ramdisk.img /ramdisk; "
+                            "echo LOOP_PERSIST >/ramdisk/file; mkdir /ramdisk/sub; "
+                            "mv /ramdisk/file /ramdisk/sub/renamed; "
+                            "test -d /ramdisk-sibling; "
+                            "test \"$(cat /ramdisk/sub/renamed)\" = LOOP_PERSIST; "
+                            "exec 3</ramdisk/sub/renamed; "
+                            "if umount /ramdisk; then exit 1; fi; exec 3<&-; "
+                            "cd /ramdisk; if umount /ramdisk; then exit 1; fi; cd /; "
+                            "umount /ramdisk; echo ROCKET_RAMDISK_UNMOUNT_OK; "
+                            "mount -t ext2 -o loop,ro /ramdisk.img /ramdisk; "
+                            "test \"$(cat /ramdisk/sub/renamed)\" = LOOP_PERSIST; "
+                            "if echo BAD >/ramdisk/readonly; then exit 1; fi; "
+                            "umount /ramdisk; "
+                            "mount -t ext2 -o loop /ramdisk.img /ramdisk; "
+                            "rm /ramdisk/sub/renamed; umount /ramdisk; "
+                            "rm /ramdisk.img; echo ROCKET_RAMDISK_OK; exit\n")
+                        # Do not overflow BusyBox's bounded interactive line editor.
+                        command = command.replace("; ", "\n")
+                    elif args.mode == "process":
                         command = ("echo ROCKET_FILE_OK >/rocket-file; cat /rocket-file; "
                                    "mv /rocket-file /rocket-moved; cat /rocket-moved; "
                                    "rm /rocket-moved; test ! -e /rocket-moved && "
@@ -154,13 +180,18 @@ def main():
                                    "OSPLAY:PMP_ON", "OSPLAY:BUSYBOX_EXIT 0", "OSPLAY:EXIT 0"):
                         if marker + "\n" not in text:
                             raise RuntimeError(f"missing {marker}")
-                    marker = "ROCKET_SHELL_OK" if args.mode == "ping" else "ROCKET_PROCESS_OK"
+                    marker = {"ping": "ROCKET_SHELL_OK", "process": "ROCKET_PROCESS_OK",
+                              "ramdisk": "ROCKET_RAMDISK_OK"}[args.mode]
                     if "\n" + marker + "\n" not in text or not sent_command:
                         raise RuntimeError("UART shell command was not executed")
                     if args.mode == "process" and text.splitlines().count("ROCKET_FILE_OK") != 2:
                         raise RuntimeError("ext4 write/read/rename did not preserve file contents")
                     if args.mode == "ping" and not (arp and echo):
                         raise RuntimeError("network peer did not verify both replies")
+                    if args.mode == "ramdisk":
+                        for stage in ("ROCKET_RAMDISK_FORMAT_OK", "ROCKET_RAMDISK_UNMOUNT_OK"):
+                            if "\n" + stage + "\n" not in text:
+                                raise RuntimeError(f"missing {stage}")
                     print(f"PASS: Rocket {args.mode}, ext4, U-mode BusyBox and clean HTIF exit; log: {log_path}")
                     return
             raise RuntimeError(f"timeout, last output:\n{text[-3000:]}")

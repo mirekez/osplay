@@ -17,6 +17,8 @@ enum class Syscall : u32 {
   truncate = 45,
   ftruncate = 46,
   ioctl = 29,
+  umount2 = 39,
+  mount = 40,
   statfs64 = 43,
   faccessat = 48,
   chdir = 49,
@@ -26,7 +28,7 @@ enum class Syscall : u32 {
   close = 57,
   pipe2 = 59,
   getdents64 = 61,
-  lseek = 62,
+  lseek = 62,  // RV32 __NR_llseek: fd, high, low, result pointer, whence.
   read = 63,
   write = 64,
   writev = 66,
@@ -103,6 +105,7 @@ enum class Errno : i32 {
   no_entry = 2,
   interrupted = 4,
   io = 5,
+  no_device_address = 6,
   exec_format = 8,
   bad_file_descriptor = 9,
   no_child = 10,
@@ -110,6 +113,8 @@ enum class Errno : i32 {
   access_denied = 13,
   bad_address = 14,
   file_exists = 17,
+  busy = 16,
+  cross_device = 18,
   no_device = 19,
   not_directory = 20,
   is_directory = 21,
@@ -155,6 +160,10 @@ enum class Errno : i32 {
       return "ftruncate";
     case Syscall::ioctl:
       return "ioctl";
+    case Syscall::mount:
+      return "mount";
+    case Syscall::umount2:
+      return "umount2";
     case Syscall::statfs64:
       return "statfs64";
     case Syscall::faccessat:

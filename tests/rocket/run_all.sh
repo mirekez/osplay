@@ -8,6 +8,7 @@ bash "$here/run_peer_test.sh"
 bash "$here/run_boot.sh"
 bash "$here/run_interactive_ping.sh"
 bash "$here/run_interactive_process.sh"
+bash "$here/.test_ramdisk.sh"
 # Host TCP/SSH require an explicitly provisioned TAP, unlike the rootless cases.
 if [[ "${ROCKET_TEST_TAP:-0}" == 1 ]]; then
   bash "$here/run_interactive_tcp.sh"

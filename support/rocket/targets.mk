@@ -33,4 +33,18 @@ rocket-test:
 	bash tests/rocket/run_kernel.sh
 rocket-all-tests:
 	bash tests/rocket/run_all.sh
+.PHONY: rocket-ramdisk-test
+ROCKET_RAMDISK_OBJECTS = $(filter-out $(BUILD)/rocket/kernel/main.o,$(ROCKET_OBJECTS)) \
+  $(BUILD)/rocket-ramdisk/kernel/main.o
+$(BUILD)/rocket-ramdisk/kernel/main.o: kernel/main.cpp Makefile support/rocket/targets.mk $(KERNEL_CXX_READY)
+	@mkdir -p $(@D)
+	$(CXX) $(ROCKET_FLAGS) -DOSPLAY_ROCKET_RAMDISK_TEST -c $< -o $@
+$(BUILD)/osplay-rocket-ramdisk-rv32.elf: $(ROCKET_RAMDISK_OBJECTS) kernel/arch/rocket/linker.ld kernel/arch/riscv32/linker.ld
+	$(LD) -m elf32lriscv -nostdlib --gc-sections -T kernel/arch/rocket/linker.ld \
+	  -Map $(BUILD)/osplay-rocket-ramdisk-rv32.map -o $@ $(ROCKET_RAMDISK_OBJECTS)
+.PHONY: rocket-ramdisk-kernel
+rocket-ramdisk-kernel: $(BUILD)/osplay-rocket-ramdisk-rv32.elf
+rocket-ramdisk-test: rocket-ramdisk-kernel
+	bash tests/rocket/.test_ramdisk.sh
+-include $(BUILD)/rocket-ramdisk/kernel/main.d
 -include $(ROCKET_OBJECTS:.o=.d)

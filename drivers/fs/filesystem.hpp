@@ -22,6 +22,9 @@ enum class Error : u8 {
   loop,
   already_exists,
   no_space,
+  busy,
+  cross_device,
+  read_only,
 };
 
 template <typename T>

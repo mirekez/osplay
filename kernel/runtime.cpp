@@ -1,5 +1,28 @@
 #include <osplay/base.hpp>
 
+extern "C" osplay::usize strlen(const char* text) {
+  osplay::usize length = 0;
+  while (text[length] != '\0') ++length;
+  return length;
+}
+extern "C" int strcmp(const char* first, const char* second) {
+  while (*first != '\0' && *first == *second) { ++first; ++second; }
+  return static_cast<unsigned char>(*first) - static_cast<unsigned char>(*second);
+}
+extern "C" int strncmp(const char* first, const char* second, osplay::usize size) {
+  while (size != 0) {
+    const int result = static_cast<unsigned char>(*first) - static_cast<unsigned char>(*second);
+    if (result != 0 || *first == '\0') return result;
+    ++first; ++second; --size;
+  }
+  return 0;
+}
+extern "C" char* strcpy(char* output, const char* input) {
+  char* begin = output;
+  do { *output++ = *input; } while (*input++ != '\0');
+  return begin;
+}
+
 extern "C" void* memcpy(void* destination, const void* source,
                         osplay::usize size) {
   auto* out = static_cast<osplay::u8*>(destination);

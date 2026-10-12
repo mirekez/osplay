@@ -25,6 +25,12 @@ namespace network {
 SocketResult socket_retain(SocketHandle) { return SocketResult::success; }
 SocketResult socket_close(SocketHandle) { return SocketResult::success; }
 }  // namespace network
+namespace drivers::fs::root {
+Error retain(const Node&) { return Error::none; }
+void release(const Node&) {}
+Error loop_open(u32) { return Error::none; }
+void loop_close(u32) {}
+}  // namespace drivers::fs::root
 }  // namespace osplay
 
 namespace {

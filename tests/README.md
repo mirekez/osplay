@@ -25,3 +25,16 @@ Any `kernel/*_test.cpp`, `drivers/*_test.cpp`, `fs/*_test.cpp`, or
 by `tests/Makefile`.
 Related cases may share one test source. Keep QEMU acceptance tests separate
 from host regressions so `make test` remains fast and deterministic.
+
+`kernel/loop_mount_test.cpp` exercises the production filesystem and syscall
+adapters with real ext2/ext4 images. It covers Linux loop-info/config layouts,
+free-device discovery, attachment, invalid descriptors/pointers/options,
+encryption rejection, block-device metadata and `/dev` enumeration, bounded
+capacity, offsets/size limits, read/write/flush failures, pinned backing files,
+mountpoint masking and prefix boundaries, nested mounts, cross-device rename,
+descriptor duplication, open-fd/cwd busy unmounts, read-only access, stale
+generation handles, autoclear, remount persistence, legacy single-indirect
+allocation/freeing, and the RV32 llseek ABI. Undefined-behavior checks run on
+this test; `e2fsck -fn` verifies both resulting images independently. These
+fixtures require host `e2fsprogs` and `truncate`, but never a privileged mount.
+Rocket's guest-side acceptance test is [`rocket/.test_ramdisk.sh`](rocket/.test_ramdisk.sh).

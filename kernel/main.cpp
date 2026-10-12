@@ -612,7 +612,11 @@ extern "C" void kernel_main() {
   process.session = 1;
   copy_path(process.current_directory, "/");
   copy_path(process.executable_path, "/bin/busybox");
-#ifdef OSPLAY_INTERACTIVE
+#ifdef OSPLAY_ROCKET_RAMDISK_TEST
+  // Exercise the real interactive shell and syscalls without unrelated SSH
+  // startup or the listener's expensive flat-address-space image swaps.
+  constexpr const char* arguments[] = {"busybox", "sh", "-i", "+m"};
+#elif defined(OSPLAY_INTERACTIVE)
   // The PID 1 login shell sources /etc/profile to start Dropbear at boot.
   constexpr const char* arguments[] = {
       "busybox", "sh", "-il", "+m"};
