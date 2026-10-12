@@ -24,11 +24,35 @@ The NIC TX limiter permits five 64-bit flits per sixteen 50 MHz clocks: a
 
 `rocket64-kernel` builds `build/osplay-rocket-rv64.elf`, using separate
 `build/rocket64` objects. Userspace lives in `build/tests/busybox-rv64` and
-requires a static RV64 Linux toolchain. This flat LP64D profile maps 8 GiB
+requires a static RV64 Linux toolchain. This flat LP64D profile maps 16 GiB
 DRAM at `0x40000000`, BusyBox at `0x41000000`, Dropbear at `0x41400000`, HTIF
 at `0x43000000`, and the ext4 RAM disk at `0x44000000`. These low addresses
 support the toolchain's medlow glibc. Trap handling preserves all FP registers.
 M-mode kernel/U-mode userspace still use PMP with virtual translation disabled.
+
+Select `rocket-kernel` for RV32/ILP32 or `rocket64-kernel` for RV64/LP64D.
+Their objects and userspace root filesystems are separate. `OSPLAY_RV64` is
+set only by the RV64 target: address-sized `uword` fields stay 32-bit in RV32.
+RV64 syscall 62 uses `lseek(fd, offset, whence)` and returns the file position;
+RV32 retains its five-argument `llseek` ABI. RV64 also uses the LP64 `sysinfo`
+layout and bounded mmap extent tracking to reuse released large allocations.
+Neither mode gains virtual translation or per-mapping memory protection.
+
+`RISCV_PREFIX`/`RISCV_SYSROOT` select the RV32 kernel headers/binutils.
+`RISCV64_PREFIX`/`RISCV64_SYSROOT` independently select the RV64 kernel tools;
+set the prefix to a static RV64 Linux toolchain when using the Venus launcher.
+For example, both configurations can coexist without changing the RV32 prefix:
+
+```bash
+make rocket-kernel RISCV_PREFIX=/path/to/rv32/bin/riscv32-unknown-elf-
+make rocket64-kernel RISCV64_PREFIX=/path/to/rv64/bin/riscv64-unknown-linux-gnu-
+```
+
+`OSPLAY_VENUS` is an optional RV64 deployment profile, not a global OSplay
+architecture switch. It grants a 2 GiB DMA aperture at 6 GiB and an 8 GiB
+read/write model mmap arena at 8 GiB; executable/stack addresses remain low.
+The kernel, HTIF, rootfs and weights disk remain outside U-mode PMP access.
+The RV32 profile does not enable these high-memory apertures.
 
 No sudo is required for the default network mode. The new
 [rootless Ethernet proxy](../network/README.md) forwards host

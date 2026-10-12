@@ -17,14 +17,14 @@ using iword = i32;
 #endif
 
 struct UserRange {
-  u32 begin;
-  u32 end;
+  uword begin;
+  uword end;
 
   [[nodiscard]] constexpr bool contains(uword address, uword size) const {
     return address >= begin && address <= end && size <= end - address;
   }
 
-  [[nodiscard]] constexpr bool aligned(u32 address, u32 alignment) const {
+  [[nodiscard]] constexpr bool aligned(uword address, uword alignment) const {
     return alignment != 0 && (alignment & (alignment - 1)) == 0 &&
            (address & (alignment - 1)) == 0;
   }

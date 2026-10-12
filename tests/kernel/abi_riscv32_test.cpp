@@ -5,6 +5,9 @@
 
 #include <support/test.hpp>
 
+static_assert(sizeof(osplay::uword) == 4);
+static_assert(sizeof(osplay::UserRange) == 8);
+
 int main() {
   osplay::test::Suite suite{"kernel/abi_riscv32"};
   using osplay::abi::riscv32::Errno;

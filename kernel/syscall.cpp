@@ -81,19 +81,22 @@ struct ActiveSignalFrame {
 
 struct SuspendedParent {
   TrapFrame frame{};
-  u32 brk{};
-  u32 mmap_begin{};
-  u32 mmap_cursor{};
-  u32 mutable_begin{};
-  u32 stack_begin{};
-  u32 mutable_size{};
-  u32 mmap_size{};
-  u32 stack_size{};
+  uword brk{};
+  uword mmap_begin{};
+  uword mmap_cursor{};
+#ifdef OSPLAY_RV64
+  memory::FlatMappings<> mappings{};
+#endif
+  uword mutable_begin{};
+  uword stack_begin{};
+  uword mutable_size{};
+  uword mmap_size{};
+  uword stack_size{};
   u32 child_status{};
   u32 child_pid{};
   u32 child_process_group{};
   process_model::ProcessLineage lineage{};
-  u32 child_tid_address{};
+  uword child_tid_address{};
   u32 process_group{};
   u32 session{};
   u32 image{};
@@ -126,7 +129,7 @@ struct WaitableChild {
 
 WaitableChild waitable_children[process_context_capacity]{};
 u32 file_creation_mask{0022};
-u32 child_tid_address{};
+uword child_tid_address{};
 process_model::SignalState signals{};
 ActiveSignalFrame active_signal_frame{};
 // At most one free extent can be introduced per live context release. Keep
@@ -139,20 +142,23 @@ enum class BackgroundWait : u8 { none, socket_read };
 
 struct ParkedBackground {
   TrapFrame frame{};
-  u32 brk{};
-  u32 mmap_begin{};
-  u32 mmap_cursor{};
-  u32 mutable_begin{};
-  u32 stack_begin{};
-  u32 mutable_size{};
-  u32 mmap_size{};
-  u32 stack_size{};
+  uword brk{};
+  uword mmap_begin{};
+  uword mmap_cursor{};
+#ifdef OSPLAY_RV64
+  memory::FlatMappings<> mappings{};
+#endif
+  uword mutable_begin{};
+  uword stack_begin{};
+  uword mutable_size{};
+  uword mmap_size{};
+  uword stack_size{};
   u32 pid{};
   u32 parent_pid{};
   u32 process_group{};
   u32 session{};
   u32 image{};
-  u32 child_tid_address{};
+  uword child_tid_address{};
   process_model::SignalState signals{};
   ActiveSignalFrame signal_frame{};
   u32 file_creation_mask{};
@@ -173,20 +179,23 @@ ParkedBackground background{};
 // the same shared arena as every other suspended address space.
 struct ParkedInteractiveChild {
   TrapFrame frame{};
-  u32 brk{};
-  u32 mmap_begin{};
-  u32 mmap_cursor{};
-  u32 mutable_begin{};
-  u32 stack_begin{};
-  u32 mutable_size{};
-  u32 mmap_size{};
-  u32 stack_size{};
+  uword brk{};
+  uword mmap_begin{};
+  uword mmap_cursor{};
+#ifdef OSPLAY_RV64
+  memory::FlatMappings<> mappings{};
+#endif
+  uword mutable_begin{};
+  uword stack_begin{};
+  uword mutable_size{};
+  uword mmap_size{};
+  uword stack_size{};
   u32 pid{};
   u32 parent_pid{};
   u32 process_group{};
   u32 session{};
   u32 image{};
-  u32 child_tid_address{};
+  uword child_tid_address{};
   process_model::SignalState signals{};
   ActiveSignalFrame signal_frame{};
   u32 file_creation_mask{};
@@ -206,7 +215,7 @@ ParkedInteractiveChild interactive_child{};
 SuspendedParent interactive_parent{};
 u32 interactive_relay_service_pid{};
 
-[[maybe_unused, nodiscard]] bool user_string_is(u32 address,
+[[maybe_unused, nodiscard]] bool user_string_is(uword address,
                                                 const char* expected);
 void reset_descriptors();
 [[nodiscard]] bool save_parent_descriptors();
@@ -382,6 +391,9 @@ void resume_parent(TrapFrame& frame, u32 status, bool child_completed,
   process.brk = parent.brk;
   process.mmap_begin = parent.mmap_begin;
   process.mmap_cursor = parent.mmap_cursor;
+#ifdef OSPLAY_RV64
+  process.mappings = parent.mappings;
+#endif
   process.mutable_begin = parent.mutable_begin;
   process.pid = parent.lineage.pid;
   process.parent_pid = parent.lineage.parent_pid;
@@ -420,8 +432,8 @@ void restore_parent(TrapFrame& frame, u32 status) {
   resume_parent(frame, status, true, return_from_clone);
 }
 
-[[nodiscard]] i32 clone(TrapFrame& frame, u32 flags, u32 stack,
-                        u32 child_tid) {
+[[nodiscard]] i32 clone(TrapFrame& frame, u32 flags, uword stack,
+                        uword child_tid) {
 #if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
   write_text("OSPLAY:CLONE_START\n");
 #endif
@@ -436,7 +448,7 @@ void restore_parent(TrapFrame& frame, u32 status) {
       clone_child_cleartid | clone_child_settid;
   const bool ordinary_fork = (behavior & ~fork_bookkeeping) == 0;
   const bool vfork = behavior == (clone_vm | clone_vfork);
-  const u32 child_stack = stack == 0 ? frame.x[2] : stack;
+  const uword child_stack = stack == 0 ? frame.x[2] : stack;
   const bool nested_background_fork =
       parent.active && process.pid == parent.child_pid;
   if ((!ordinary_fork && !vfork) || (flags & signal_mask) != sigchld ||
@@ -465,6 +477,9 @@ void restore_parent(TrapFrame& frame, u32 status) {
   parent.brk = process.brk;
   parent.mmap_begin = process.mmap_begin;
   parent.mmap_cursor = process.mmap_cursor;
+#ifdef OSPLAY_RV64
+  parent.mappings = process.mappings;
+#endif
   parent.mutable_begin = process.mutable_begin;
   parent.file_creation_mask = file_creation_mask;
   memcpy(parent.current_directory, process.current_directory,
@@ -504,12 +519,12 @@ void restore_parent(TrapFrame& frame, u32 status) {
   return 0;
 }
 
-[[nodiscard]] bool copy_user_string(u32 address, char* output, u32 capacity) {
+[[nodiscard]] bool copy_user_string(uword address, char* output, u32 capacity) {
   if (address == 0 || capacity == 0) {
     return false;
   }
   for (u32 i = 0; i < capacity; ++i) {
-    if (!user_memory.contains(address + i, 1)) {
+    if (address > ~uword{0} - i || !user_memory.contains(address + i, 1)) {
       return false;
     }
     output[i] = *reinterpret_cast<const char*>(address + i);
@@ -842,6 +857,9 @@ void capture_interactive_child(TrapFrame& frame,
   interactive_child.brk = process.brk;
   interactive_child.mmap_begin = process.mmap_begin;
   interactive_child.mmap_cursor = process.mmap_cursor;
+#ifdef OSPLAY_RV64
+  interactive_child.mappings = process.mappings;
+#endif
   interactive_child.mutable_begin = process.mutable_begin;
   interactive_child.stack_begin =
       align_down(frame.x[2], static_cast<u32>(16));
@@ -977,6 +995,9 @@ void capture_interactive_child(TrapFrame& frame,
   parent.brk = process.brk;
   parent.mmap_begin = process.mmap_begin;
   parent.mmap_cursor = process.mmap_cursor;
+#ifdef OSPLAY_RV64
+  parent.mappings = process.mappings;
+#endif
   parent.mutable_begin = process.mutable_begin;
   parent.stack_begin = align_down(frame.x[2], static_cast<u32>(16));
   parent.child_pid =
@@ -1069,6 +1090,9 @@ void capture_interactive_child(TrapFrame& frame,
   process.brk = interactive_child.brk;
   process.mmap_begin = interactive_child.mmap_begin;
   process.mmap_cursor = interactive_child.mmap_cursor;
+#ifdef OSPLAY_RV64
+  process.mappings = interactive_child.mappings;
+#endif
   process.mutable_begin = interactive_child.mutable_begin;
   process.pid = child_pid;
   process.parent_pid = child_parent_pid;
@@ -1129,6 +1153,9 @@ void capture_background(TrapFrame& frame, network::SocketHandle wait_socket) {
   background.brk = process.brk;
   background.mmap_begin = process.mmap_begin;
   background.mmap_cursor = process.mmap_cursor;
+#ifdef OSPLAY_RV64
+  background.mappings = process.mappings;
+#endif
   background.mutable_begin = process.mutable_begin;
   background.stack_begin = align_down(frame.x[2], static_cast<u32>(16));
   background.pid = process.pid;
@@ -1385,6 +1412,9 @@ void discard_parked_session() {
   parent.brk = process.brk;
   parent.mmap_begin = process.mmap_begin;
   parent.mmap_cursor = process.mmap_cursor;
+#ifdef OSPLAY_RV64
+  parent.mappings = process.mappings;
+#endif
   parent.mutable_begin = process.mutable_begin;
   parent.stack_begin = align_down(frame.x[2], static_cast<u32>(16));
   parent.child_pid = background.pid;
@@ -1431,6 +1461,9 @@ void discard_parked_session() {
   process.brk = background.brk;
   process.mmap_begin = background.mmap_begin;
   process.mmap_cursor = background.mmap_cursor;
+#ifdef OSPLAY_RV64
+  process.mappings = background.mappings;
+#endif
   process.mutable_begin = background.mutable_begin;
   process.pid = background.pid;
   process.parent_pid = background.parent_pid;
@@ -1475,14 +1508,14 @@ void discard_parked_session() {
   return size;
 }
 
-[[nodiscard]] bool canonicalize_path(u32 address, const char* base,
+[[nodiscard]] bool canonicalize_path(uword address, const char* base,
                                      char* output, u32 capacity) {
   char user_path[path::capacity]{};
   return copy_user_string(address, user_path, sizeof(user_path)) &&
          path::canonicalize(base, user_path, output, capacity);
 }
 
-[[nodiscard]] Node path_node_from(u32 address, const char* base,
+[[nodiscard]] Node path_node_from(uword address, const char* base,
                                   char* canonical = nullptr) {
   char local[256]{};
   char* path = canonical == nullptr ? local : canonical;
@@ -1511,14 +1544,14 @@ void discard_parked_session() {
   return result ? Node{(*result)} : Node{Node::none};
 }
 
-[[nodiscard]] Node path_node(u32 address, char* canonical = nullptr) {
+[[nodiscard]] Node path_node(uword address, char* canonical = nullptr) {
   return path_node_from(address, process.current_directory, canonical);
 }
 
 [[nodiscard]] bool directory(Node node);
 [[nodiscard]] u32 node_size(Node node);
 
-[[nodiscard]] Node path_node_at(u32 descriptor, u32 address,
+[[nodiscard]] Node path_node_at(u32 descriptor, uword address,
                                 char* canonical = nullptr) {
   constexpr u32 at_current_working_directory = static_cast<u32>(-100);
   char raw[path::capacity]{};
@@ -1576,7 +1609,7 @@ void discard_parked_session() {
   }
 }
 
-[[nodiscard]] i32 mkdirat(u32 directory_descriptor, u32 address, u32 mode) {
+[[nodiscard]] i32 mkdirat(u32 directory_descriptor, uword address, u32 mode) {
   constexpr u32 at_current_working_directory = static_cast<u32>(-100);
   char raw[path::capacity]{};
   if (!copy_user_string(address, raw, sizeof(raw))) {
@@ -1613,7 +1646,7 @@ void discard_parked_session() {
   return static_cast<i32>(previous);
 }
 
-[[nodiscard]] i32 fchmodat(u32 directory_descriptor, u32 address, u32 mode) {
+[[nodiscard]] i32 fchmodat(u32 directory_descriptor, uword address, u32 mode) {
   const Node node = path_node_at(directory_descriptor, address);
   if (node == Node::none) {
     return error(Errno::no_entry);
@@ -1627,7 +1660,7 @@ void discard_parked_session() {
              : error(Errno::no_entry);
 }
 
-[[maybe_unused, nodiscard]] i32 openat(u32 directory_descriptor, u32 path,
+[[maybe_unused, nodiscard]] i32 openat(u32 directory_descriptor, uword path,
                                       u32 flags) {
   constexpr u32 access_mode = 3;
   constexpr u32 create = 0x40;
@@ -1781,7 +1814,7 @@ void discard_parked_session() {
 
 // Ownership metadata is supported for live devpts nodes. The root filesystem
 // currently has no ownership mutation API, just as with fchmodat above.
-[[nodiscard]] i32 fchownat(u32 directory_descriptor, u32 address,
+[[nodiscard]] i32 fchownat(u32 directory_descriptor, uword address,
                            u32 uid, u32 gid, u32 flags) {
   constexpr u32 at_symlink_nofollow = 0x100;
   constexpr u32 at_empty_path = 0x1000;
@@ -1970,7 +2003,7 @@ void discard_parked_session() {
                                                                  : nullptr;
 }
 
-[[nodiscard]] bool read_sockaddr(u32 address, u32 size,
+[[nodiscard]] bool read_sockaddr(uword address, u32 size,
                                  network::Endpoint& endpoint) {
   if (size < sizeof(abi::socket::SockaddrIn) ||
       !user_memory.contains(address, sizeof(abi::socket::SockaddrIn))) {
@@ -1986,7 +2019,7 @@ void discard_parked_session() {
   return true;
 }
 
-[[nodiscard]] bool sockaddr_output_valid(u32 address, u32 length_address) {
+[[nodiscard]] bool sockaddr_output_valid(uword address, uword length_address) {
   if (address == 0) {
     return true;
   }
@@ -1995,8 +2028,8 @@ void discard_parked_session() {
          user_memory.contains(address, sizeof(abi::socket::SockaddrIn));
 }
 
-[[nodiscard]] i32 write_sockaddr(network::Endpoint endpoint, u32 address,
-                                 u32 length_address) {
+[[nodiscard]] i32 write_sockaddr(network::Endpoint endpoint, uword address,
+                                 uword length_address) {
   if (address == 0) {
     return 0;
   }
@@ -2016,7 +2049,7 @@ void discard_parked_session() {
   return 0;
 }
 
-[[nodiscard]] i32 bind(u32 descriptor, u32 address, u32 size) {
+[[nodiscard]] i32 bind(u32 descriptor, uword address, u32 size) {
   auto* slot = network_descriptor(descriptor);
   if (slot == nullptr) {
     return error(Errno::bad_file_descriptor);
@@ -2045,8 +2078,8 @@ void discard_parked_session() {
   return socket_error(result);
 }
 
-[[nodiscard]] i32 accept(TrapFrame& frame, u32 descriptor, u32 address,
-                         u32 length_address, u32 flags) {
+[[nodiscard]] i32 accept(TrapFrame& frame, u32 descriptor, uword address,
+                         uword length_address, u32 flags) {
   constexpr u32 supported_flags = abi::socket::sock_nonblock |
                                   abi::socket::sock_cloexec;
   if ((flags & ~supported_flags) != 0) {
@@ -2106,8 +2139,8 @@ void discard_parked_session() {
   return static_cast<i32>(accepted_descriptor);
 }
 
-[[nodiscard]] i32 socket_name(u32 descriptor, u32 address,
-                              u32 length_address, bool peer) {
+[[nodiscard]] i32 socket_name(u32 descriptor, uword address,
+                              uword length_address, bool peer) {
   auto* slot = network_descriptor(descriptor);
   if (slot == nullptr) {
     return error(Errno::bad_file_descriptor);
@@ -2124,7 +2157,7 @@ void discard_parked_session() {
                         length_address);
 }
 
-[[nodiscard]] i32 setsockopt(u32 descriptor, u32 value_address,
+[[nodiscard]] i32 setsockopt(u32 descriptor, uword value_address,
                              u32 value_size) {
   if (network_descriptor(descriptor) == nullptr) {
     return error(Errno::bad_file_descriptor);
@@ -2212,7 +2245,7 @@ void discard_parked_session() {
   return static_cast<i32>(new_descriptor);
 }
 
-[[nodiscard]] i32 pipe2(u32 address, u32 flags) {
+[[nodiscard]] i32 pipe2(uword address, u32 flags) {
   constexpr u32 nonblock = 0x800;
   constexpr u32 cloexec = 0x80000;
   if ((flags & ~(nonblock | cloexec)) != 0) {
@@ -2295,7 +2328,7 @@ void discard_parked_session() {
   return error(Errno::no_memory);
 }
 
-[[nodiscard]] i32 unlinkat(u32 directory_descriptor, u32 path_address,
+[[nodiscard]] i32 unlinkat(u32 directory_descriptor, uword path_address,
                            u32 flags) {
   if (flags != 0) {
     return error(Errno::invalid_argument);
@@ -2312,8 +2345,8 @@ void discard_parked_session() {
   return filesystem_error(drivers::fs::root::remove(canonical));
 }
 
-[[nodiscard]] i32 renameat(u32 old_directory, u32 old_path,
-                           u32 new_directory, u32 new_path) {
+[[nodiscard]] i32 renameat(u32 old_directory, uword old_path,
+                           u32 new_directory, uword new_path) {
   char source[path::capacity]{};
   char destination[path::capacity]{};
   const Node source_node = path_node_at(old_directory, old_path, source);
@@ -2356,7 +2389,7 @@ void discard_parked_session() {
   return filesystem_error(drivers::fs::root::truncate(slot.node.file, size));
 }
 
-[[nodiscard]] i32 truncate_path(u32 path_address, u32 size) {
+[[nodiscard]] i32 truncate_path(uword path_address, u32 size) {
   char canonical[path::capacity]{};
   Node node = path_node(path_address, canonical);
   if (node == Node::none) {
@@ -2431,7 +2464,7 @@ void discard_parked_session() {
   return contents == nullptr ? 0 : text_size(contents);
 }
 
-[[nodiscard]] i32 read_virtual(TrapFrame& frame, u32 descriptor, u32 address,
+[[nodiscard]] i32 read_virtual(TrapFrame& frame, u32 descriptor, uword address,
                                u32 size) {
   Descriptor* selected = descriptor_slot(descriptor);
   if (selected == nullptr) {
@@ -2605,7 +2638,7 @@ void discard_parked_session() {
   return static_cast<i32>(count);
 }
 
-[[nodiscard]] i32 emit_dirent(u32 address, u32 capacity, u64 inode,
+[[nodiscard]] i32 emit_dirent(uword address, u32 capacity, u64 inode,
                               u64 offset, u8 type, const char* name) {
   const u32 name_size = text_size(name) + 1;
   const u32 record_size = align_up(19 + name_size, static_cast<u32>(8));
@@ -2624,7 +2657,7 @@ void discard_parked_session() {
 }
 
 struct Ext4DirectoryState {
-  u32 address;
+  uword address;
   u32 capacity;
   u32 start;
   u32 cursor;
@@ -2683,7 +2716,7 @@ struct Ext4DirectoryState {
   return true;
 }
 
-[[maybe_unused, nodiscard]] i32 getdents64(u32 descriptor, u32 address,
+[[maybe_unused, nodiscard]] i32 getdents64(u32 descriptor, uword address,
                                           u32 size) {
   if (descriptor < 3 || descriptor >= 16 ||
       !user_memory.contains(address, size)) {
@@ -2815,7 +2848,7 @@ static_assert(sizeof(Stat64) == 128);
   return directory(node) ? 0040000 | 0755 : 0100000 | 0444;
 }
 
-[[nodiscard]] i32 write_stat(Node node, u32 address) {
+[[nodiscard]] i32 write_stat(Node node, uword address) {
   if (!user_memory.contains(address, sizeof(Stat64))) {
     return error(Errno::bad_address);
   }
@@ -2843,7 +2876,7 @@ static_assert(sizeof(Stat64) == 128);
   return 0;
 }
 
-[[maybe_unused, nodiscard]] i32 fstat64(u32 descriptor, u32 address) {
+[[maybe_unused, nodiscard]] i32 fstat64(u32 descriptor, uword address) {
   const Node node = descriptor_node(descriptor);
   return node == Node::none ? error(Errno::bad_file_descriptor)
                             : write_stat(node, address);
@@ -2867,7 +2900,7 @@ struct [[gnu::packed]] Statx {
 
 static_assert(sizeof(Statx) == 256);
 
-[[maybe_unused, nodiscard]] i32 write_statx(Node node, u32 address) {
+[[maybe_unused, nodiscard]] i32 write_statx(Node node, uword address) {
   if (node == Node::none) {
     return error(Errno::no_entry);
   }
@@ -2908,8 +2941,8 @@ static_assert(sizeof(Statx) == 256);
   return 0;
 }
 
-[[maybe_unused, nodiscard]] i32 readlinkat(u32 directory_descriptor, u32 path,
-                                          u32 address, u32 size) {
+[[maybe_unused, nodiscard]] i32 readlinkat(u32 directory_descriptor, uword path,
+                                          uword address, u32 size) {
   char canonical[256]{};
   static_cast<void>(path_node_at(directory_descriptor, path, canonical));
   const char* target = nullptr;
@@ -2935,8 +2968,8 @@ static_assert(sizeof(Statx) == 256);
   return static_cast<i32>(count);
 }
 
-[[maybe_unused, nodiscard]] i32 ppoll(TrapFrame& frame, u32 address, u32 count,
-                                     u32 timeout_address, bool time64) {
+[[maybe_unused, nodiscard]] i32 ppoll(TrapFrame& frame, uword address, u32 count,
+                                     uword timeout_address, bool time64) {
   if (count > 16 ||
       !user_memory.contains(address, count * sizeof(Pollfd32))) {
     return error(Errno::bad_address);
@@ -3050,15 +3083,15 @@ static_assert(sizeof(Statx) == 256);
 }
 
 [[maybe_unused, nodiscard]] i32 pselect6(TrapFrame& frame, u32 count,
-                                        u32 read_address,
-                                        u32 write_address, u32 error_address,
-                                        u32 timeout_address, bool time64) {
+                                        uword read_address,
+                                        uword write_address, uword error_address,
+                                        uword timeout_address, bool time64) {
   if (count > 16) {
     return error(Errno::invalid_argument);
   }
   constexpr u32 set_size = sizeof(uword);
-  const u32 addresses[]{read_address, write_address, error_address};
-  for (u32 address : addresses) {
+  const uword addresses[]{read_address, write_address, error_address};
+  for (uword address : addresses) {
     if (address != 0 && !user_memory.contains(address, set_size)) {
       return error(Errno::bad_address);
     }
@@ -3175,7 +3208,7 @@ static_assert(sizeof(Statx) == 256);
   }
 }
 
-[[maybe_unused, nodiscard]] i32 chdir(u32 path) {
+[[maybe_unused, nodiscard]] i32 chdir(uword path) {
   char canonical[256]{};
   const Node node = path_node(path, canonical);
   if (node == Node::none) {
@@ -3188,7 +3221,7 @@ static_assert(sizeof(Statx) == 256);
   return 0;
 }
 
-[[nodiscard]] i32 execve(TrapFrame& frame, u32 path, u32 argv, u32 envp) {
+[[nodiscard]] i32 execve(TrapFrame& frame, uword path, uword argv, uword envp) {
   char canonical[256]{};
   Node node = path_node(path, canonical);
   if (text_is(canonical, "/proc/self/exe")) {
@@ -3238,7 +3271,7 @@ static_assert(sizeof(Statx) == 256);
   const char* environment[max_environment]{};
   u32 count = 0;
   for (; count < max_arguments; ++count) {
-    const u32 slot = argv + count * sizeof(uword);
+    const uword slot = argv + count * sizeof(uword);
     if (!user_memory.contains(slot, sizeof(uword))) {
       return error(Errno::bad_address);
     }
@@ -3247,7 +3280,7 @@ static_assert(sizeof(Statx) == 256);
       break;
     }
     if (!user_memory.contains(address, 1) ||
-        !copy_user_string(static_cast<u32>(address), argument_storage[count],
+        !copy_user_string(address, argument_storage[count],
                           max_argument_size)) {
       return error(Errno::bad_address);
     }
@@ -3260,7 +3293,7 @@ static_assert(sizeof(Statx) == 256);
   u32 environment_count = 0;
   if (envp != 0) {
     for (; environment_count < max_environment; ++environment_count) {
-      const u32 slot = envp + environment_count * sizeof(uword);
+      const uword slot = envp + environment_count * sizeof(uword);
       if (!user_memory.contains(slot, sizeof(uword))) {
         return error(Errno::bad_address);
       }
@@ -3269,7 +3302,7 @@ static_assert(sizeof(Statx) == 256);
         break;
       }
       if (!user_memory.contains(address, 1) ||
-          !copy_user_string(static_cast<u32>(address), environment_storage[environment_count],
+          !copy_user_string(address, environment_storage[environment_count],
                             max_environment_size)) {
         return error(Errno::bad_address);
       }
@@ -3323,7 +3356,7 @@ static_assert(sizeof(Statx) == 256);
   return nullptr;
 }
 
-[[nodiscard]] i32 wait4(u32 pid, u32 status) {
+[[nodiscard]] i32 wait4(u32 pid, uword status) {
   auto* child = waitable_for_wait4(pid);
   if (child == nullptr) {
     return error(Errno::no_child);
@@ -3354,7 +3387,7 @@ struct [[gnu::packed]] ChildSiginfo {
 
 static_assert(sizeof(ChildSiginfo) == 128);
 
-[[nodiscard]] i32 waitid(u32 which, u32 pid, u32 address, u32 options) {
+[[nodiscard]] i32 waitid(u32 which, u32 pid, uword address, u32 options) {
   constexpr u32 all_children = 0;
   constexpr u32 specific_pid = 1;
   constexpr u32 process_group = 2;
@@ -3474,11 +3507,11 @@ void deliver_pending_signal_impl(TrapFrame& frame) {
   frame.extreme_signal_handler = action.handler;
   frame.extreme_signal_number = signal;
 #else
-  const u32 old_stack = frame.x[2];
+  const uword old_stack = frame.x[2];
   if (old_stack < sizeof(SignalFrame32)) {
     shutdown(128 + signal);
   }
-  const u32 address = align_down(old_stack - static_cast<u32>(sizeof(SignalFrame32)),
+  const uword address = align_down(old_stack - static_cast<u32>(sizeof(SignalFrame32)),
                                  static_cast<u32>(16));
   if (!user_memory.contains(address, sizeof(SignalFrame32))) {
     shutdown(128 + signal);
@@ -3554,8 +3587,8 @@ void deliver_pending_signal_impl(TrapFrame& frame) {
   return static_cast<i32>(frame.x[10]);
 }
 
-[[nodiscard]] i32 rt_sigaction(u32 signal, u32 action_address,
-                               u32 old_address, u32 set_size) {
+[[nodiscard]] i32 rt_sigaction(u32 signal, uword action_address,
+                               uword old_address, u32 set_size) {
   if (set_size != sizeof(u64) || signal > process_model::signal_max) {
     return error(Errno::invalid_argument);
   }
@@ -3595,8 +3628,8 @@ void deliver_pending_signal_impl(TrapFrame& frame) {
   return error(Errno::invalid_argument);
 }
 
-[[nodiscard]] i32 rt_sigprocmask(u32 operation, u32 set_address,
-                                 u32 old_address, u32 set_size) {
+[[nodiscard]] i32 rt_sigprocmask(u32 operation, uword set_address,
+                                 uword old_address, u32 set_size) {
   if (set_size != sizeof(u64)) {
     return error(Errno::invalid_argument);
   }
@@ -3758,10 +3791,10 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
                   remainder * 100};
 }
 
-[[maybe_unused, nodiscard]] bool user_string_is(u32 address,
+[[maybe_unused, nodiscard]] bool user_string_is(uword address,
                                                 const char* expected) {
   for (u32 i = 0; i < 64; ++i) {
-    if (address > user_end - i || !user_memory.contains(address + i, 1)) {
+    if (address > ~uword{0} - i || !user_memory.contains(address + i, 1)) {
       return false;
     }
     const char actual = *reinterpret_cast<const char*>(address + i);
@@ -3775,7 +3808,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return false;
 }
 
-[[nodiscard]] i32 clock_gettime(u32 address, bool time64) {
+[[nodiscard]] i32 clock_gettime(uword address, bool time64) {
   const auto time = tick_time();
   if (time64) {
     if (!user_memory.contains(address, sizeof(Timespec64))) {
@@ -3794,7 +3827,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return 0;
 }
 
-[[nodiscard]] i32 gettimeofday(u32 address) {
+[[nodiscard]] i32 gettimeofday(uword address) {
   if (address == 0) {
     return 0;
   }
@@ -3809,7 +3842,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return 0;
 }
 
-[[nodiscard]] i32 uname(u32 address) {
+[[nodiscard]] i32 uname(uword address) {
   constexpr u32 field_size = 65;
   constexpr u32 field_count = 6;
   constexpr u32 size = field_size * field_count;
@@ -3837,7 +3870,35 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return 0;
 }
 
-[[nodiscard]] i32 sysinfo(u32 address) {
+[[nodiscard]] i32 sysinfo(uword address) {
+#ifdef OSPLAY_RV64
+  struct Sysinfo64 {
+    iword uptime;
+    uword loads[3];
+    uword totalram, freeram, sharedram, bufferram, totalswap, freeswap;
+    u16 procs, pad;
+    uword totalhigh, freehigh;
+    u32 mem_unit;
+  };
+  static_assert(sizeof(Sysinfo64) == 112);
+  if (!user_memory.contains(address, sizeof(Sysinfo64)))
+    return error(Errno::bad_address);
+  Sysinfo64 value{};
+  value.uptime = static_cast<iword>(tick_time().seconds);
+#ifdef OSPLAY_VENUS
+  value.totalram = abi::venus::heap_end - abi::venus::heap_begin;
+  value.freeram = process.mmap_cursor <= abi::venus::heap_end ?
+      abi::venus::heap_end - process.mmap_cursor : 0;
+#else
+  value.totalram = user_end - user_begin;
+  value.freeram = process.mmap_cursor <= user_stack_top ?
+      user_stack_top - process.mmap_cursor : 0;
+#endif
+  value.procs = 1;
+  value.mem_unit = 1;
+  memcpy(reinterpret_cast<void*>(address), &value, sizeof(value));
+  return 0;
+#else
   constexpr u32 size = 64;
   if (!user_memory.contains(address, size)) {
     return error(Errno::bad_address);
@@ -3850,9 +3911,10 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   *reinterpret_cast<u16*>(address + 40) = 1;
   words[13] = 1;
   return 0;
+#endif
 }
 
-[[nodiscard]] i32 getcpu(u32 cpu, u32 node) {
+[[nodiscard]] i32 getcpu(uword cpu, uword node) {
   if (cpu != 0) {
     if (!user_memory.contains(cpu, sizeof(u32))) {
       return error(Errno::bad_address);
@@ -3868,7 +3930,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return 0;
 }
 
-[[nodiscard]] i32 write(u32 descriptor, u32 address, u32 size) {
+[[nodiscard]] i32 write(u32 descriptor, uword address, u32 size) {
   if (!user_memory.contains(address, size)) {
     return error(Errno::bad_address);
   }
@@ -4026,7 +4088,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return static_cast<i32>((*result));
 }
 
-[[nodiscard]] i32 writev(u32 descriptor, u32 address, u32 count) {
+[[nodiscard]] i32 writev(u32 descriptor, uword address, u32 count) {
   if (count > 1024 ||
       !user_memory.contains(address, count * sizeof(Iovec32)) ||
       !user_memory.aligned(address, alignof(Iovec32))) {
@@ -4043,12 +4105,13 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
 #endif
       [descriptor](uword base, uword size) {
         if (!user_memory.contains(base, size)) return error(Errno::bad_address);
-        return write(descriptor, static_cast<u32>(base), static_cast<u32>(size));
+        if (size > 0x7fffffffU) return error(Errno::invalid_argument);
+        return write(descriptor, base, static_cast<u32>(size));
       },
       error(Errno::invalid_argument));
 }
 
-[[nodiscard]] i32 read(TrapFrame& frame, u32 descriptor, u32 address,
+[[nodiscard]] i32 read(TrapFrame& frame, u32 descriptor, uword address,
                        u32 size) {
   if (descriptor >= 3 ||
       (descriptor < 3 &&
@@ -4083,7 +4146,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return static_cast<i32>(count);
 }
 
-[[nodiscard]] i32 getcwd(u32 address, u32 size) {
+[[nodiscard]] i32 getcwd(uword address, u32 size) {
   const char* path = process.current_directory;
   const u32 required = text_size(path) + 1;
   if (size < required || !user_memory.contains(address, size)) {
@@ -4094,7 +4157,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
 }
 
 #if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
-[[nodiscard]] i32 uart_ioctl(u32 descriptor, u32 request, u32 address) {
+[[nodiscard]] i32 uart_ioctl(u32 descriptor, u32 request, uword address) {
   if (descriptor > 2) {
     return error(Errno::bad_file_descriptor);
   }
@@ -4161,7 +4224,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
 }
 #endif
 
-[[nodiscard]] i32 pty_ioctl(Descriptor& slot, u32 request, u32 address) {
+[[nodiscard]] i32 pty_ioctl(Descriptor& slot, u32 request, uword address) {
   constexpr u32 tcgets = 0x5401;
   constexpr u32 tcsets = 0x5402;
   constexpr u32 tcsetsw = 0x5403;
@@ -4302,7 +4365,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return error(Errno::not_a_tty);
 }
 
-[[nodiscard]] i32 network_ioctl(u32 descriptor, u32 request, u32 address) {
+[[nodiscard]] i32 network_ioctl(u32 descriptor, u32 request, uword address) {
   if (descriptor < 3 || descriptor >= 16 ||
       descriptors[descriptor - 3].node == Node::none) {
     return error(Errno::bad_file_descriptor);
@@ -4364,7 +4427,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
 }
 
 // Loop ABI decoding is confined to the syscall adapter.
-[[nodiscard]] i32 seek_file(u32 fd, u32 high, u32 low, u32 result_address, u32 whence) {
+[[maybe_unused, nodiscard]] i32 seek_file(u32 fd, u32 high, u32 low, uword result_address, u32 whence) {
   auto* slot = descriptor_slot(fd);
   if (!slot || slot->node == Node::none) return error(Errno::bad_file_descriptor);
   if (slot->node != Node::filesystem && slot->node != Node::loop_device &&
@@ -4382,12 +4445,29 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return 0;
 }
 
+#ifdef OSPLAY_RV64
+// RV64 syscall 62 is lseek(fd, signed offset, whence), not RV32 llseek.
+[[nodiscard]] iword seek_file64(u32 fd, iword offset, u32 whence) {
+  auto* slot = descriptor_slot(fd);
+  if (!slot || slot->node == Node::none) return error(Errno::bad_file_descriptor);
+  if (slot->node != Node::filesystem && slot->node != Node::loop_device &&
+      slot->node != Node::pseudo) return error(Errno::invalid_argument);
+  if (whence > 2) return error(Errno::invalid_argument);
+  const iword base = whence == 0 ? 0 : whence == 1 ? slot->offset : node_size(slot->node);
+  // The filesystem adapter still bounds individual files to 32-bit offsets.
+  if (offset < -base || offset > iword(0xffffffffU) - base)
+    return error(Errno::invalid_argument);
+  slot->offset = static_cast<u32>(base + offset);
+  return static_cast<iword>(slot->offset);
+}
+#endif
+
 [[nodiscard]] i32 loop_error(drivers::fs::Error value) {
   if (value == drivers::fs::Error::not_found) return error(Errno::no_device_address);
   if (value == drivers::fs::Error::unsupported) return error(Errno::operation_not_supported);
   return filesystem_error(value);
 }
-[[nodiscard]] i32 loop_ioctl(Descriptor& slot, u32 request, u32 address) {
+[[nodiscard]] i32 loop_ioctl(Descriptor& slot, u32 request, uword address) {
   namespace disk = drivers::fs::root;
   namespace loop = abi::loop;
   if (slot.node == Node::loop_control) {
@@ -4459,8 +4539,8 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return loop_error(disk::loop_configure(index, info.offset, info.size_limit, info.flags,
                                          reinterpret_cast<const char*>(info.file_name)));
 }
-[[nodiscard]] i32 mount_filesystem(u32 source_address, u32 target_address,
-                                   u32 type_address, u32 flags, u32 data_address) {
+[[nodiscard]] i32 mount_filesystem(uword source_address, uword target_address,
+                                   uword type_address, u32 flags, uword data_address) {
   char source[path::capacity]{}, target[path::capacity]{}, type[16]{}, data[256]{};
   if (!copy_user_string(type_address, type, sizeof(type)) ||
       !canonicalize_path(source_address, process.current_directory, source, sizeof(source)) ||
@@ -4475,7 +4555,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   if (index == path::invalid_number) return error(Errno::no_device);
   return filesystem_error(drivers::fs::root::mount_loop(index, target, (flags & 1) != 0, type));
 }
-[[nodiscard]] i32 unmount_filesystem(u32 target_address, u32 flags) {
+[[nodiscard]] i32 unmount_filesystem(uword target_address, u32 flags) {
   char target[path::capacity]{};
   if (!canonicalize_path(target_address, process.current_directory, target, sizeof(target)))
     return error(Errno::bad_address);
@@ -4495,7 +4575,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return filesystem_error(drivers::fs::root::unmount(target));
 }
 
-[[nodiscard]] i32 ioctl(u32 descriptor, u32 request, u32 address) {
+[[nodiscard]] i32 ioctl(u32 descriptor, u32 request, uword address) {
   if (auto* slot = descriptor_slot(descriptor); slot != nullptr &&
       (slot->node == Node::loop_device || slot->node == Node::loop_control))
     return loop_ioctl(*slot, request, address);
@@ -4511,7 +4591,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return network_ioctl(descriptor, request, address);
 }
 
-[[nodiscard]] i32 getrandom(u32 address, u32 size) {
+[[nodiscard]] i32 getrandom(uword address, u32 size) {
   if (!user_memory.contains(address, size)) {
     return error(Errno::bad_address);
   }
@@ -4526,43 +4606,59 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return static_cast<i32>(size);
 }
 
-[[nodiscard]] iword mmap(u32 address, u32 size, u32 flags) {
+[[nodiscard]] iword mmap(uword address, uword size, u32 flags) {
   constexpr u32 map_fixed = 0x10;
   if (size == 0) {
     return error(Errno::invalid_argument);
   }
-  const u32 rounded = align_up(size, static_cast<u32>(4096));
+  const uword rounded = align_up(size, uword{4096});
   if (rounded < size) {
     return error(Errno::no_memory);
   }
   if ((flags & map_fixed) != 0) {
+#ifdef OSPLAY_RV64
+    if (!user_memory.aligned(address, 4096)) return error(Errno::invalid_argument);
+#endif
     if (!user_memory.contains(address, rounded)) {
       return error(Errno::no_memory);
     }
+#ifndef OSPLAY_RV64
     return static_cast<iword>(address);
+#endif
   }
 #ifdef OSPLAY_EXTREME_USERSPACE
-  const u32 allocation_end = user_heap_end;
+  const uword allocation_end = user_heap_end;
 #else
 #ifdef OSPLAY_VENUS
-  const u32 allocation_end = process.mmap_begin == abi::venus::heap_begin ?
+  const uword allocation_end = process.mmap_begin == abi::venus::heap_begin ?
       abi::venus::heap_end : user_stack_top;
 #else
-  const u32 allocation_end = user_stack_top;
+  const uword allocation_end = user_stack_top;
 #endif
 #endif
-  const u32 result = process.mmap_cursor;
+#ifdef OSPLAY_RV64
+  if ((flags & map_fixed) && address < process.mmap_begin) {
+    memset(reinterpret_cast<void*>(address), 0, rounded);
+    return static_cast<iword>(address);
+  }
+  const uword result = process.mappings.map(process.mmap_begin, allocation_end,
+      rounded, address, (flags & map_fixed) != 0);
+  if (result == 0) return error(Errno::no_memory);
+  process.mmap_cursor = process.mappings.high_water(process.mmap_begin);
+#else
+  const uword result = process.mmap_cursor;
   if (!user_memory.contains(result, rounded) ||
       result >= allocation_end ||
       rounded > allocation_end - result) {
     return error(Errno::no_memory);
   }
   process.mmap_cursor += rounded;
+#endif
   memset(reinterpret_cast<void*>(result), 0, rounded);
   return static_cast<iword>(result);
 }
 
-[[nodiscard]] i32 prlimit(u32 old_limit) {
+[[nodiscard]] i32 prlimit(uword old_limit) {
   if (old_limit == 0) {
     return 0;
   }
@@ -4574,11 +4670,23 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return 0;
 }
 
-[[nodiscard]] i32 protect_or_unmap(u32 address, u32 size) {
+[[nodiscard]] i32 protect_or_unmap(uword address, uword size) {
   return user_memory.contains(address, size) ? 0 : error(Errno::no_memory);
 }
 
-[[nodiscard]] i32 futex(u32 address, u32 operation, u32 expected) {
+#ifdef OSPLAY_RV64
+[[nodiscard]] i32 unmap64(uword address, uword size) {
+  const uword rounded = align_up(size, uword{4096});
+  if (size == 0 || rounded < size || !user_memory.aligned(address, 4096))
+    return error(Errno::invalid_argument);
+  if (!user_memory.contains(address, rounded)) return error(Errno::no_memory);
+  if (!process.mappings.unmap(address, rounded)) return error(Errno::no_memory);
+  process.mmap_cursor = process.mappings.high_water(process.mmap_begin);
+  return 0;
+}
+#endif
+
+[[nodiscard]] i32 futex(uword address, u32 operation, u32 expected) {
   if (!user_memory.contains(address, sizeof(u32)) ||
       !user_memory.aligned(address, alignof(u32))) {
     return error(Errno::bad_address);
@@ -4678,11 +4786,11 @@ iword dispatch_syscall(TrapFrame& frame) {
   write_u32(number);
   write_text("\n");
 #endif
-  const u32 a0 = frame.x[10];
-  const u32 a1 = frame.x[11];
-  const u32 a2 = frame.x[12];
-  const u32 a3 = frame.x[13];
-  const u32 a4 = frame.x[14];
+  const uword a0 = frame.x[10];
+  const uword a1 = frame.x[11];
+  const uword a2 = frame.x[12];
+  const uword a3 = frame.x[13];
+  const uword a4 = frame.x[14];
   switch (static_cast<Syscall>(number)) {
     case Syscall::getcwd:
       return getcwd(a0, a1);
@@ -4755,7 +4863,11 @@ iword dispatch_syscall(TrapFrame& frame) {
     case Syscall::getdents64:
       return getdents64(a0, a1, a2);
     case Syscall::lseek:
+#ifdef OSPLAY_RV64
+      return seek_file64(a0, static_cast<iword>(a1), a2);
+#else
       return seek_file(a0, a1, a2, a3, a4);
+#endif
     case Syscall::exit:
     case Syscall::exit_group:
       if (resume_after_child_exit(frame, a0)) {
@@ -4836,6 +4948,9 @@ iword dispatch_syscall(TrapFrame& frame) {
     case Syscall::mmap2:
       return mmap(a0, a1, a3);
     case Syscall::munmap:
+#ifdef OSPLAY_RV64
+      return unmap64(a0, a1);
+#endif
     case Syscall::mprotect:
       return protect_or_unmap(a0, a1);
     case Syscall::riscv_hwprobe:

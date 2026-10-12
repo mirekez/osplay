@@ -27,7 +27,7 @@ extern "C" void* memcpy(void* destination, const void* source,
                         osplay::usize size) {
   auto* out = static_cast<osplay::u8*>(destination);
   const auto* in = static_cast<const osplay::u8*>(source);
-  using Word [[gnu::may_alias]] = osplay::u32;
+  using Word [[gnu::may_alias]] = osplay::uword;
   if (((reinterpret_cast<osplay::usize>(out) |
         reinterpret_cast<osplay::usize>(in)) &
        (sizeof(Word) - 1)) == 0) {
@@ -81,15 +81,29 @@ extern "C" void* memmove(void* destination, const void* source,
 extern "C" void* memset(void* destination, int value, osplay::usize size) {
   auto* out = static_cast<osplay::u8*>(destination);
   const auto byte = static_cast<osplay::u8>(value);
+  using Word [[gnu::may_alias]] = osplay::uword;
   while (size != 0 &&
          (reinterpret_cast<osplay::usize>(out) &
-          (sizeof(osplay::u32) - 1)) != 0) {
+          (sizeof(Word) - 1)) != 0) {
     *out++ = byte;
     --size;
   }
-  const osplay::u32 word = static_cast<osplay::u32>(byte) * 0x01010101u;
+  const Word word = static_cast<Word>(byte) * (~Word{0} / 255);
+  while (size >= 8 * sizeof(word)) {
+    auto* words = reinterpret_cast<Word*>(out);
+    words[0] = word;
+    words[1] = word;
+    words[2] = word;
+    words[3] = word;
+    words[4] = word;
+    words[5] = word;
+    words[6] = word;
+    words[7] = word;
+    out += 8 * sizeof(word);
+    size -= 8 * sizeof(word);
+  }
   while (size >= sizeof(word)) {
-    *reinterpret_cast<osplay::u32*>(out) = word;
+    *reinterpret_cast<Word*>(out) = word;
     out += sizeof(word);
     size -= sizeof(word);
   }

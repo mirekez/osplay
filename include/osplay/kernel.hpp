@@ -4,7 +4,13 @@
 #include <osplay/net/interface.hpp>
 #include <osplay/net/socket.hpp>
 #include <osplay/scheduler.hpp>
+#ifdef OSPLAY_RV64
+#include <osplay/memory/flat_mappings.hpp>
+#endif
 #ifdef OSPLAY_VENUS
+#ifndef OSPLAY_RV64
+#error OSPLAY_VENUS requires the RV64 Rocket port for its high DMA/model arenas
+#endif
 #include <osplay/abi/venus.hpp>
 #endif
 
@@ -32,14 +38,13 @@ inline constexpr u32 user_stack_top = 0x81fff000;
 #endif
 #ifdef OSPLAY_VENUS
 // Keep executable/stack addresses low, and leave HTIF/rootfs/weights outside
-// userspace. The additional arena is initially sufficient for accelerator
-// BIST; the model's multi-GiB allocations need a separate RV64 extension.
+// userspace. Model allocations use the separate RV64 mmap arena.
 struct UserMemory {
   [[nodiscard]] constexpr bool contains(uword address, uword size) const {
     return UserRange{user_begin, user_end}.contains(address, size) ||
            UserRange{abi::venus::heap_begin, abi::venus::heap_end}.contains(address, size);
   }
-  [[nodiscard]] constexpr bool aligned(u32 address, u32 alignment) const {
+  [[nodiscard]] constexpr bool aligned(uword address, uword alignment) const {
     return UserRange{user_begin, user_end}.aligned(address, alignment);
   }
   [[nodiscard]] constexpr bool cache_access(u64 address, u64 bytes, u64 discard) const {
@@ -54,10 +59,13 @@ inline constexpr UserRange user_memory{user_begin, user_end};
 #endif
 
 struct Process {
-  u32 brk;
-  u32 mmap_begin;
-  u32 mmap_cursor;
-  u32 mutable_begin;
+  uword brk;
+  uword mmap_begin;
+  uword mmap_cursor;
+  uword mutable_begin;
+#ifdef OSPLAY_RV64
+  memory::FlatMappings<> mappings;
+#endif
   u32 exit_code;
   u32 image;
   u32 pid;

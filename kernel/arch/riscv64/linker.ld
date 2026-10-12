@@ -20,8 +20,10 @@ SECTIONS
     *(.sdata .sdata.*)
   }
   __kernel_image_end = .;
-  ASSERT(__kernel_image_end - __kernel_begin <= 500000,
-         "kernel text/rodata/data exceed 500 kB")
+  /* RV64 process metadata includes bounded mmap extents. Keep its image
+     within 512 KiB; the separate kernel/user overlap check remains below. */
+  ASSERT(__kernel_image_end - __kernel_begin <= 512K,
+         "kernel text/rodata/data exceed 512 KiB")
 
   .bss (NOLOAD) : ALIGN(16) {
     __bss_begin = .;

@@ -19,13 +19,14 @@ osplay-proxy:
 tribe-tap extreme-tap: osplay-tap
 include support/kernel-cxx/flags.mk
 
-RV_FLAGS = --target=riscv32-unknown-elf -march=rv32ima_zicsr -mabi=ilp32 \
-	-mcmodel=medany -msmall-data-limit=0 -std=c++2c -ffreestanding \
+RV_COMMON_FLAGS = -mcmodel=medany -msmall-data-limit=0 -std=c++2c -ffreestanding \
 	-fno-exceptions -fno-rtti -fno-unwind-tables \
 	-fno-asynchronous-unwind-tables -fno-threadsafe-statics \
 	-fno-use-cxa-atexit -fno-stack-protector -fdata-sections \
 	-ffunction-sections -Wall -Wextra -Werror -O2 -g \
-	-I$(ROOT) -I$(ROOT)/include -MMD -MP $(KERNEL_CXX_TARGET_HEADERS)
+	-I$(ROOT) -I$(ROOT)/include -MMD -MP
+RV_FLAGS = --target=riscv32-unknown-elf -march=rv32ima_zicsr -mabi=ilp32 \
+	$(RV_COMMON_FLAGS) $(KERNEL_CXX_TARGET_HEADERS)
 
 KERNEL_ELF := $(BUILD)/osplay-rv32.elf
 KERNEL_MAP := $(BUILD)/osplay-rv32.map

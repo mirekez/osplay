@@ -7,6 +7,7 @@
 #include <array>
 
 static_assert(sizeof(osplay::uword) == 8);
+static_assert(sizeof(osplay::UserRange) == 16);
 static_assert(sizeof(osplay::TrapFrame) == 560);
 static_assert(__builtin_offsetof(osplay::TrapFrame, mepc) == 256);
 static_assert(__builtin_offsetof(osplay::TrapFrame, fp) == 288);
@@ -23,6 +24,14 @@ int main() {
   OSPLAY_CHECK(suite, memory.contains(0x41000000, 8));
   OSPLAY_CHECK(suite, !memory.contains(0x141000000, 8));
   OSPLAY_CHECK(suite, !memory.contains(0x41ffffff, 2));
+  const UserRange high{u64{8} << 30, u64{16} << 30};
+  OSPLAY_CHECK(suite, high.contains(high.begin, u64{3} << 30));
+  OSPLAY_CHECK(suite, high.contains(high.end - 1, 1));
+  OSPLAY_CHECK(suite, !high.contains(high.end, 1));
+  OSPLAY_CHECK(suite, !high.contains(high.begin - 1, 1));
+  OSPLAY_CHECK(suite, !high.contains(~u64{0}, 4096));
+  OSPLAY_CHECK(suite, high.aligned(high.begin + 4096, 4096));
+  OSPLAY_CHECK(suite, !high.aligned(high.begin + 1, 4096));
   const std::array vectors{abi::Iovec64{0x141000000, 4}, abi::Iovec64{0x241000000, 6}};
   unsigned calls = 0;
   auto writer = [&](u64 base, u64 size) -> i32 {

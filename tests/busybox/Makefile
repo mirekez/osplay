@@ -52,6 +52,7 @@ ROOTFS_IMAGE := $(BUILD)/rootfs.ext4
 ROOTFS_SIZE ?= 16M
 # Optional statically linked applications, installed under their basename.
 ROOTFS_EXTRA_FILES ?=
+ROOTFS_EXTRA_DATA ?=
 ROOTFS_CONFIG := rootfs/etc/group rootfs/etc/inittab rootfs/etc/passwd \
 	rootfs/etc/profile rootfs/etc/shells rootfs/etc/init.d/rcS \
 	rootfs/etc/dropbear/dropbear_ed25519_host_key.b64 \
@@ -154,6 +155,7 @@ $(DROPBEAR_PUBLIC_KEY): $(DROPBEAR_HOST_KEY)
 
 $(ROOTFS_IMAGE): Makefile $(BUSYBOX) $(STRESS_NG) $(DROPBEAR) \
 		$(ROOTFS_EXTRA_FILES) \
+		$(ROOTFS_EXTRA_DATA) \
 		$(ROOTFS_CONFIG) $(DROPBEAR_PUBLIC_KEY) set_rootfs_owners.sh verify_rootfs.sh
 	rm -rf $(ROOTFS_STAGE)
 	install -d $(ROOTFS_STAGE)/bin $(ROOTFS_STAGE)/sbin \
@@ -173,6 +175,7 @@ $(ROOTFS_IMAGE): Makefile $(BUSYBOX) $(STRESS_NG) $(DROPBEAR) \
 	install -m 0755 $(STRESS_NG) $(ROOTFS_STAGE)/bin/stress-ng
 	install -m 0755 $(DROPBEAR) $(ROOTFS_STAGE)/usr/sbin/dropbear
 	@for file in $(ROOTFS_EXTRA_FILES); do install -m0755 "$$file" $(ROOTFS_STAGE)/bin/; done
+	@for file in $(ROOTFS_EXTRA_DATA); do install -m0644 "$$file" $(ROOTFS_STAGE)/bin/; done
 	install -m 0644 rootfs/etc/group $(ROOTFS_STAGE)/etc/group
 	install -m 0644 rootfs/etc/inittab $(ROOTFS_STAGE)/etc/inittab
 	install -m 0644 rootfs/etc/passwd $(ROOTFS_STAGE)/etc/passwd

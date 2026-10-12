@@ -8,8 +8,10 @@ namespace osplay::abi::venus {
 inline constexpr uword cache_range = 0xf01;
 inline constexpr u64 dma_begin = 6ULL << 30;
 inline constexpr u64 dma_end = 8ULL << 30;
-inline constexpr u32 heap_begin = 0x48000000;
-inline constexpr u32 heap_end = 0x80000000;
+// Keep medlow executable/stack addresses below 2 GiB. Large model allocations
+// use a separate RW arena, above both the weights disk and the DMA aperture.
+inline constexpr u64 heap_begin = 8ULL << 30;
+inline constexpr u64 heap_end = 16ULL << 30;
 inline constexpr u64 mmio_begin = 0x20000000;
 inline constexpr u64 mmio_size = 0x200000;
 }

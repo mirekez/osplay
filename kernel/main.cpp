@@ -392,6 +392,7 @@ void disable_interrupt_controllers() {
   asm volatile("csrw pmpaddr1, %0" : : "r"(dma));
   asm volatile("csrw pmpaddr2, %0" : : "r"(u64(user_begin) >> 2));
   asm volatile("csrw pmpaddr3, %0" : : "r"(u64(user_end) >> 2));
+  // Deny the kernel/rootfs/weights gap, then allow only the high model heap.
   asm volatile("csrw pmpaddr4, %0" : : "r"(u64(abi::venus::heap_begin) >> 2));
   asm volatile("csrw pmpaddr5, %0" : : "r"(u64(abi::venus::heap_end) >> 2));
   constexpr u64 config = 0x00000b080f001b1bULL;
@@ -478,6 +479,9 @@ bool replace_with_executable(TrapFrame& frame, const char* path,
   }
 #endif
   process.mmap_cursor = process.mmap_begin;
+#ifdef OSPLAY_RV64
+  process.mappings = {};
+#endif
   const u32 stack = make_initial_stack(image, arguments, argument_count,
                                        environment, environment_count);
   for (auto& value : frame.x) {
@@ -649,6 +653,9 @@ extern "C" void kernel_main() {
   process.mmap_begin = user_begin + 0x800000;
 #endif
   process.mmap_cursor = process.mmap_begin;
+#ifdef OSPLAY_RV64
+  process.mappings = {};
+#endif
   process.pid = 1;
   process.parent_pid = 0;
   process.process_group = 1;
