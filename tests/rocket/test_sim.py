@@ -7,6 +7,7 @@ import selectors
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -59,6 +60,7 @@ def echo_ok(frame):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("boot", "ping", "process", "ramdisk", "weights", "application"))
+    parser.add_argument("--show-output", action="store_true", help="stream guest UART output as well as logging it")
     args = parser.parse_args()
     out = Path(os.environ.get("OSPLAY_ROCKET_TEST_LOG_DIR", ROOT / "build/tests/rocket"))
     out.mkdir(parents=True, exist_ok=True)
@@ -97,6 +99,9 @@ def main():
                         if not chunk:
                             selector.unregister(proc.stdout)
                         log.write(chunk)
+                        if args.show_output:
+                            sys.stdout.buffer.write(chunk)
+                            sys.stdout.buffer.flush()
                         text += chunk.decode(errors="replace").replace("\r", "")
                     else:
                         message, sender = peer.recvfrom(4096)
@@ -189,6 +194,9 @@ def main():
                 if proc.poll() is not None:
                     remaining = proc.stdout.read()
                     log.write(remaining)
+                    if args.show_output:
+                        sys.stdout.buffer.write(remaining)
+                        sys.stdout.buffer.flush()
                     text += remaining.decode(errors="replace").replace("\r", "")
                     if proc.returncode:
                         raise RuntimeError(f"simulator exit {proc.returncode}")
