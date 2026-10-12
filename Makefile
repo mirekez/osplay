@@ -13,6 +13,9 @@ OBJCOPY := $(RISCV_PREFIX)objcopy
 .PHONY: osplay-tap
 osplay-tap:
 	bash tests/network/build_tap.sh
+.PHONY: osplay-proxy
+osplay-proxy:
+	bash tests/network/build_proxy.sh
 tribe-tap extreme-tap: osplay-tap
 include support/kernel-cxx/flags.mk
 
@@ -412,6 +415,7 @@ clean:
 
 # Extreme uses its own instruction set and compiler; no RV32 ELF is loaded.
 include support/rocket/targets.mk
+include support/rocket/rv64.mk
 
 .PHONY: extreme-prepare extreme-boot-test extreme-kernel-test extreme-all-tests extreme-peer-test
 extreme-prepare:

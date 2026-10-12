@@ -348,6 +348,43 @@ int main() {
   fail_write = false;
   OSPLAY_CHECK(suite, root::loop_detach(0) == Error::none);
   reset_descriptors();
+  // A preloaded physical memory image uses the same Volume and mount routing,
+  // but never creates a rootfs backing file or copies the image in the guest.
+  disk_bytes = original;
+  OSPLAY_CHECK(suite, root::initialize());
+  OSPLAY_CHECK(suite, root::mkdir("/memory", 0755) == Error::none);
+  auto memory = image("loop.ext2");
+  auto broken = memory;
+  broken[1024 + 0x38] = 0;
+  OSPLAY_CHECK(suite, root::mount_memory(broken.data(), broken.size(), "/memory") ==
+                          Error::invalid_format);
+  OSPLAY_CHECK(suite, root::free_loop() == 0);
+  OSPLAY_CHECK(suite, root::mount_memory(nullptr, memory.size(), "/memory") ==
+                          Error::invalid_argument);
+  OSPLAY_CHECK(suite, root::mount_memory(memory.data(), memory.size() - 1, "/memory") ==
+                          Error::invalid_argument);
+  OSPLAY_CHECK(suite, root::mount_memory(memory.data(), memory.size(), "/memory", false) ==
+                          Error::none);
+  OSPLAY_CHECK(suite, root::loop_size(0) == memory.size());
+  OSPLAY_CHECK(suite, root::loop_read(0, memory.size(), buffer, 1).error() ==
+                          Error::out_of_bounds);
+  OSPLAY_CHECK(suite, root::loop_read(0, 0, nullptr, 1).error() == Error::invalid_argument);
+  OSPLAY_CHECK(suite, root::create("/memory/file", value, sizeof(value)) == Error::none);
+  const auto memory_file = *root::lookup("/memory/file");
+  OSPLAY_CHECK(suite, root::retain(memory_file) == Error::none);
+  OSPLAY_CHECK(suite, root::unmount("/memory") == Error::busy);
+  root::release(memory_file);
+  OSPLAY_CHECK(suite, root::unmount("/memory") == Error::none);
+  OSPLAY_CHECK(suite, root::free_loop() == 0);
+  OSPLAY_CHECK(suite, root::mount_memory(memory.data(), memory.size(), "/memory") ==
+                          Error::none);
+  const auto readonly_file = *root::lookup("/memory/file");
+  OSPLAY_CHECK(suite, root::read(readonly_file, 0, buffer, sizeof(value)) == sizeof(value));
+  OSPLAY_CHECK(suite, std::memcmp(buffer, value, sizeof(value)) == 0);
+  OSPLAY_CHECK(suite, root::create("/memory/no", value, sizeof(value)) == Error::read_only);
+  OSPLAY_CHECK(suite, root::loop_write(0, 0, buffer, sizeof(buffer)).error() == Error::read_only);
+  OSPLAY_CHECK(suite, std::strstr(root::mount_table(), "/dev/ram0 /memory ext2 ro 0 0\n") != nullptr);
+  OSPLAY_CHECK(suite, root::unmount("/memory") == Error::none);
   munmap(user, 65536);
   return suite.finish();
 }

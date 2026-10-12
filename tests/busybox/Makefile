@@ -10,6 +10,7 @@ include $(ROOT)/support/toolchain.mk
 CONDA ?= $(if $(strip $(CONDA_PREFIX)),$(CONDA_PREFIX),$(ROOT)/.conda)/bin
 LLVM_READELF := $(CONDA)/llvm-readelf
 JOBS ?= 4
+OSPLAY_USER_XLEN ?= 32
 MKE2FS ?= /usr/sbin/mke2fs
 E2FSCK ?= /usr/sbin/e2fsck
 DEBUGFS ?= /usr/sbin/debugfs
@@ -21,13 +22,13 @@ BUSYBOX_SOURCE := $(BUILD)/busybox-source
 BUSYBOX_OUT := $(BUILD)/busybox
 BUSYBOX := $(BUSYBOX_OUT)/busybox
 BUSYBOX_CONFIG := config/busybox.config
-BUSYBOX_ADDRESS := 0x81000000
+BUSYBOX_ADDRESS := $(if $(filter 64,$(OSPLAY_USER_XLEN)),0x41000000,0x81000000)
 
 STRESS_NG_REFERENCE := third_party/stress-ng
 # Vendored snapshot of f73c6bd5f34df31dbaea8215e1e9c3f5cbc8d060.
 STRESS_NG_SOURCE := $(BUILD)/stress-ng-source
 STRESS_NG := $(STRESS_NG_SOURCE)/stress-ng
-STRESS_NG_ADDRESS := 0x81000000
+STRESS_NG_ADDRESS := $(BUSYBOX_ADDRESS)
 STRESS_NG_PATCH := patches/stress-ng-osplay.patch
 
 DROPBEAR_VERSION := 2026.94
@@ -38,7 +39,7 @@ DROPBEAR_SOURCE := $(BUILD)/dropbear-source
 DROPBEAR := $(DROPBEAR_SOURCE)/dropbear
 DROPBEAR_CONFIG := config/dropbear_localoptions.h
 DROPBEAR_PATCH := patches/dropbear-osplay.patch
-DROPBEAR_ADDRESS := 0x81400000
+DROPBEAR_ADDRESS := $(if $(filter 64,$(OSPLAY_USER_XLEN)),0x41400000,0x81400000)
 DROPBEAR_HOST_OUT := $(BUILD)/dropbear-host
 DROPBEAR_HOST_STAMP := $(DROPBEAR_HOST_OUT)/.built
 DROPBEAR_HOST_KEY := $(ROOT)/build/osplay_ssh_key
@@ -49,6 +50,8 @@ DROPBEAR_CLIENT_KEY := $(DROPBEAR_HOST_OUT)/osplay_ssh_key.dropbear
 ROOTFS_STAGE := $(BUILD)/rootfs
 ROOTFS_IMAGE := $(BUILD)/rootfs.ext4
 ROOTFS_SIZE ?= 16M
+# Optional statically linked applications, installed under their basename.
+ROOTFS_EXTRA_FILES ?=
 ROOTFS_CONFIG := rootfs/etc/group rootfs/etc/inittab rootfs/etc/passwd \
 	rootfs/etc/profile rootfs/etc/shells rootfs/etc/init.d/rcS \
 	rootfs/etc/dropbear/dropbear_ed25519_host_key.b64 \
@@ -58,7 +61,7 @@ ROOTFS_CONFIG := rootfs/etc/group rootfs/etc/inittab rootfs/etc/passwd \
 .PHONY: check-linux-toolchain
 
 check-linux-toolchain:
-	@bash check_linux_toolchain.sh '$(RISCV_LINUX_PREFIX)'
+	@OSPLAY_USER_XLEN=$(OSPLAY_USER_XLEN) bash check_linux_toolchain.sh '$(RISCV_LINUX_PREFIX)'
 
 $(BUSYBOX_SOURCE)/.source-ready $(STRESS_NG_SOURCE)/.source-ready \
   $(DROPBEAR_SOURCE)/.source-ready: | check-linux-toolchain
@@ -111,7 +114,7 @@ $(STRESS_NG): $(STRESS_NG_SOURCE)/.source-ready
 		LIB_MPFR= LIB_NL= LIB_SCTP= LIB_XXHASH= LIB_Z= stress-ng
 	$(RISCV_LINUX_PREFIX)strip $@
 	$(LLVM_READELF) -l $@ > $(STRESS_NG_SOURCE)/program-headers.txt
-	grep -E -q 'LOAD +0x[0-9a-f]+ +$(STRESS_NG_ADDRESS)' \
+	grep -E -q 'LOAD +0x[0-9a-f]+ +0x0*$(subst 0x,,$(STRESS_NG_ADDRESS))' \
 		$(STRESS_NG_SOURCE)/program-headers.txt
 
 $(DROPBEAR_SOURCE)/.source-ready: download_dropbear.sh
@@ -150,6 +153,7 @@ $(DROPBEAR_PUBLIC_KEY): $(DROPBEAR_HOST_KEY)
 	ssh-keygen -y -f '$<' > '$@'
 
 $(ROOTFS_IMAGE): Makefile $(BUSYBOX) $(STRESS_NG) $(DROPBEAR) \
+		$(ROOTFS_EXTRA_FILES) \
 		$(ROOTFS_CONFIG) $(DROPBEAR_PUBLIC_KEY) set_rootfs_owners.sh verify_rootfs.sh
 	rm -rf $(ROOTFS_STAGE)
 	install -d $(ROOTFS_STAGE)/bin $(ROOTFS_STAGE)/sbin \
@@ -168,6 +172,7 @@ $(ROOTFS_IMAGE): Makefile $(BUSYBOX) $(STRESS_NG) $(DROPBEAR) \
 	ln $(ROOTFS_STAGE)/bin/busybox $(ROOTFS_STAGE)/sbin/init
 	install -m 0755 $(STRESS_NG) $(ROOTFS_STAGE)/bin/stress-ng
 	install -m 0755 $(DROPBEAR) $(ROOTFS_STAGE)/usr/sbin/dropbear
+	@for file in $(ROOTFS_EXTRA_FILES); do install -m0755 "$$file" $(ROOTFS_STAGE)/bin/; done
 	install -m 0644 rootfs/etc/group $(ROOTFS_STAGE)/etc/group
 	install -m 0644 rootfs/etc/inittab $(ROOTFS_STAGE)/etc/inittab
 	install -m 0644 rootfs/etc/passwd $(ROOTFS_STAGE)/etc/passwd

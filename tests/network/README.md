@@ -165,3 +165,37 @@ The 120-second user/handshake/close deadlines and bounded capacities are local
 resource policies. Optional extensions are deliberately not advertised.
 
 For shared Tribe/Extreme/Rocket TAP setup and preflight checks, see [TAP.md](TAP.md).
+# Rootless SSH Proxy
+
+`ethgig_proxy` is the unprivileged counterpart to `ethgig_tap`. It uses
+libslirp's TCP/IP stack and the same UNIX-datagram Ethernet framing as the
+Rocket/Tribe bridges. Only the host endpoint changes: the guest still receives
+Ethernet frames through its simulated NIC and DMA driver, and Dropbear runs
+inside OSplay. No guest TCP or SSH operation is implemented by the proxy.
+
+```bash
+bash tests/network/build_proxy.sh
+build/tests/network/ethgig_proxy --socket /tmp/osplay-proxy.sock --ssh-port 2222
+# Give this socket to the simulator:
+export ROCKET_ETH_SOCKET=/tmp/osplay-proxy.sock
+# After OSplay reports OSPLAY:TCP_LISTEN 22:
+build/tests/busybox/dropbear-host/dbclient -c none -y -y \
+  -i build/tests/busybox/dropbear-host/osplay_ssh_key.dropbear \
+  -p 2222 root@127.0.0.1
+```
+
+The forward is bound only to localhost and targets `192.168.76.2:22`.
+Encryption-free SSH is for this local simulation test only; public-key
+authentication remains enabled. RV64 builds place the client under
+`build/tests/busybox-rv64/dropbear-host/` instead.
+
+The default `--clock-scale 1000` slows libslirp's virtual TCP retransmission
+clock relative to wall time for cycle-accurate simulation. Use `--clock-scale 1`
+for a fast emulator. This does not change guest time or bypass NIC transactions.
+IPv6, DNS, DHCP and outbound Internet access are disabled in this profile.
+The build uses an installed libslirp development package when available; on
+Debian/Ubuntu it can download and extract packages locally without sudo.
+`SLIRP_ROOT` can select an already extracted package prefix on other hosts.
+
+Run `python3 tests/network/test_proxy.py` for its rootless framing, ARP and ICMP
+regression. It does not substitute for a complete guest SSH test.

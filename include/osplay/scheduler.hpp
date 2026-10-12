@@ -7,12 +7,20 @@
 
 namespace osplay {
 
-struct TrapFrame {
-  u32 x[32];
-  u32 mepc;
-  u32 mstatus;
-  u32 mcause;
-  u32 mtval;
+struct
+#ifdef OSPLAY_RV64
+alignas(16)
+#endif
+TrapFrame {
+  uword x[32];
+  uword mepc;
+  uword mstatus;
+  uword mcause;
+  uword mtval;
+#ifdef OSPLAY_RV64
+  u64 fp[32];
+  uword fcsr;
+#endif
 #ifdef OSPLAY_EXTREME_USERSPACE
   ExtremeContext context;
   bool extreme_start;
@@ -22,7 +30,9 @@ struct TrapFrame {
 #endif
 };
 
-#ifndef OSPLAY_EXTREME_USERSPACE
+#ifdef OSPLAY_RV64
+static_assert(sizeof(TrapFrame) == 560);
+#elif !defined(OSPLAY_EXTREME_USERSPACE)
 static_assert(sizeof(TrapFrame) == 36 * sizeof(u32));
 #endif
 

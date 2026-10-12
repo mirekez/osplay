@@ -54,4 +54,4 @@ fi
 "${cross_prefix}strip" "$source_tree/dropbear"
 "$llvm_readelf" -l "$source_tree/dropbear" \
   >"$source_tree/program-headers.txt"
-grep -E -q "LOAD +0x[0-9a-f]+ +$address" "$source_tree/program-headers.txt"
+grep -E -q "LOAD +0x[0-9a-f]+ +${address/0x/0x0*}" "$source_tree/program-headers.txt"

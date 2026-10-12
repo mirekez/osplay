@@ -36,7 +36,11 @@ using abi::riscv32::Syscall;
 using abi::riscv32::error;
 using PseudoFilesystem = pseudo_fs::Filesystem;
 
+#ifdef OSPLAY_RV64
+using Iovec32 = abi::Iovec64;
+#else
 using abi::Iovec32;
+#endif
 
 struct [[gnu::packed]] Rlimit64 {
   u64 current;
@@ -60,8 +64,8 @@ struct [[gnu::packed]] Pollfd32 {
 };
 
 struct [[gnu::packed]] Timeval32 {
-  i32 seconds;
-  i32 microseconds;
+  iword seconds;
+  iword microseconds;
 };
 
 struct TickTime {
@@ -3052,19 +3056,19 @@ static_assert(sizeof(Statx) == 256);
   if (count > 16) {
     return error(Errno::invalid_argument);
   }
-  constexpr u32 set_size = sizeof(u32);
+  constexpr u32 set_size = sizeof(uword);
   const u32 addresses[]{read_address, write_address, error_address};
   for (u32 address : addresses) {
     if (address != 0 && !user_memory.contains(address, set_size)) {
       return error(Errno::bad_address);
     }
   }
-  const u32 requested_read =
-      read_address == 0 ? 0 : *reinterpret_cast<const u32*>(read_address);
-  const u32 requested_write =
-      write_address == 0 ? 0 : *reinterpret_cast<const u32*>(write_address);
-  const u32 requested_error =
-      error_address == 0 ? 0 : *reinterpret_cast<const u32*>(error_address);
+  const uword requested_read =
+      read_address == 0 ? 0 : *reinterpret_cast<const uword*>(read_address);
+  const uword requested_write =
+      write_address == 0 ? 0 : *reinterpret_cast<const uword*>(write_address);
+  const uword requested_error =
+      error_address == 0 ? 0 : *reinterpret_cast<const uword*>(error_address);
   u64 deadline = ~u64{0};
   if (timeout_address != 0) {
     constexpr u64 ticks_per_second = 10'000'000;
@@ -3130,13 +3134,13 @@ static_assert(sizeof(Statx) == 256);
     }
     if (ready_count != 0 || arch::time_ticks() >= deadline) {
       if (read_address != 0) {
-        *reinterpret_cast<u32*>(read_address) = ready_read;
+        *reinterpret_cast<uword*>(read_address) = ready_read;
       }
       if (write_address != 0) {
-        *reinterpret_cast<u32*>(write_address) = ready_write;
+        *reinterpret_cast<uword*>(write_address) = ready_write;
       }
       if (error_address != 0) {
-        *reinterpret_cast<u32*>(error_address) = ready_error;
+        *reinterpret_cast<uword*>(error_address) = ready_error;
       }
       return ready_count;
     }
@@ -3198,8 +3202,8 @@ static_assert(sizeof(Statx) == 256);
     const auto executable = drivers::fs::root::lookup(canonical);
     node = executable ? Node{(*executable)} : Node{Node::none};
   }
-  if (!user_memory.aligned(argv, alignof(u32)) ||
-      (envp != 0 && !user_memory.aligned(envp, alignof(u32)))) {
+  if (!user_memory.aligned(argv, alignof(uword)) ||
+      (envp != 0 && !user_memory.aligned(envp, alignof(uword)))) {
     return error(Errno::invalid_argument);
   }
   if (node == Node::none || node != Node::filesystem ||
@@ -3234,15 +3238,16 @@ static_assert(sizeof(Statx) == 256);
   const char* environment[max_environment]{};
   u32 count = 0;
   for (; count < max_arguments; ++count) {
-    const u32 slot = argv + count * sizeof(u32);
-    if (!user_memory.contains(slot, sizeof(u32))) {
+    const u32 slot = argv + count * sizeof(uword);
+    if (!user_memory.contains(slot, sizeof(uword))) {
       return error(Errno::bad_address);
     }
-    const u32 address = *reinterpret_cast<const u32*>(slot);
+    const uword address = *reinterpret_cast<const uword*>(slot);
     if (address == 0) {
       break;
     }
-    if (!copy_user_string(address, argument_storage[count],
+    if (!user_memory.contains(address, 1) ||
+        !copy_user_string(static_cast<u32>(address), argument_storage[count],
                           max_argument_size)) {
       return error(Errno::bad_address);
     }
@@ -3255,15 +3260,16 @@ static_assert(sizeof(Statx) == 256);
   u32 environment_count = 0;
   if (envp != 0) {
     for (; environment_count < max_environment; ++environment_count) {
-      const u32 slot = envp + environment_count * sizeof(u32);
-      if (!user_memory.contains(slot, sizeof(u32))) {
+      const u32 slot = envp + environment_count * sizeof(uword);
+      if (!user_memory.contains(slot, sizeof(uword))) {
         return error(Errno::bad_address);
       }
-      const u32 address = *reinterpret_cast<const u32*>(slot);
+      const uword address = *reinterpret_cast<const uword*>(slot);
       if (address == 0) {
         break;
       }
-      if (!copy_user_string(address, environment_storage[environment_count],
+      if (!user_memory.contains(address, 1) ||
+          !copy_user_string(static_cast<u32>(address), environment_storage[environment_count],
                             max_environment_size)) {
         return error(Errno::bad_address);
       }
@@ -3402,23 +3408,23 @@ static_assert(sizeof(ChildSiginfo) == 128);
 }
 
 struct [[gnu::packed]] SignalAction32 {
-  u32 handler;
-  u32 flags;
+  uword handler;
+  uword flags;
   u64 mask;
 };
 
-static_assert(sizeof(SignalAction32) == 16);
+static_assert(sizeof(SignalAction32) == (sizeof(uword) == 8 ? 24 : 16));
 
-// RV32 Linux rt_sigframe is siginfo_t followed by ucontext_t.  RISC-V keeps
+// Linux rt_sigframe is siginfo_t followed by ucontext_t. RISC-V keeps
 // PC in gregs[0], x1..x31 in gregs[1..31], and aligns mcontext to 16 bytes.
 struct SignalUcontext32 {
-  u32 flags;
-  u32 link;
-  u32 stack_pointer;
-  u32 stack_flags;
-  u32 stack_size;
-  u8 signal_mask_and_reserved[140];
-  u32 general_registers[32];
+  uword flags;
+  uword link;
+  uword stack_pointer;
+  uword stack_flags;
+  uword stack_size;
+  u8 signal_mask_and_reserved[sizeof(uword) == 8 ? 136 : 140];
+  uword general_registers[32];
   u8 floating_point_state[528];
 };
 
@@ -3429,9 +3435,9 @@ struct SignalFrame32 {
   u8 alignment[8];
 };
 
-static_assert(sizeof(SignalUcontext32) == 816);
-static_assert(__builtin_offsetof(SignalUcontext32, general_registers) == 160);
-static_assert(sizeof(SignalFrame32) == 960);
+static_assert(sizeof(SignalUcontext32) == (sizeof(uword) == 8 ? 960 : 816));
+static_assert(__builtin_offsetof(SignalUcontext32, general_registers) == (sizeof(uword) == 8 ? 176 : 160));
+static_assert(sizeof(SignalFrame32) == (sizeof(uword) == 8 ? 1104 : 960));
 
 void deliver_pending_signal_impl(TrapFrame& frame) {
   if (active_signal_frame.active) {
@@ -3576,7 +3582,7 @@ void deliver_pending_signal_impl(TrapFrame& frame) {
     return error(Errno::invalid_argument);
   }
 #endif
-  const process_model::SignalAction action{input.handler, input.flags,
+  const process_model::SignalAction action{static_cast<u32>(input.handler), static_cast<u32>(input.flags),
                                             input.mask};
   switch (signals.set_action(number, action)) {
     case process_model::SignalStatus::success:
@@ -3814,10 +3820,19 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   memset(output, 0, size);
   constexpr const char* fields[field_count] = {
       "OSplay", "osplay", "0.1", "rv32-flat", "riscv32", ""};
+#ifdef OSPLAY_RV64
+  constexpr const char* machine = "riscv64";
+  constexpr const char* version = "rv64-flat";
+#endif
   for (u32 field = 0; field < field_count; ++field) {
+#ifdef OSPLAY_RV64
+    const char* text = field == 3 ? version : (field == 4 ? machine : fields[field]);
+    for (u32 i = 0; text[i] != '\0'; ++i) output[field * field_size + i] = text[i];
+#else
     for (u32 i = 0; fields[field][i] != '\0'; ++i) {
       output[field * field_size + i] = fields[field][i];
     }
+#endif
   }
   return 0;
 }
@@ -4021,8 +4036,15 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   std::array<Iovec32, 1024> snapshot;
   memcpy(snapshot.data(), reinterpret_cast<const void*>(address),
          count * sizeof(Iovec32));
+#ifdef OSPLAY_RV64
+  return io::scatter_write64(std::span<const Iovec32>{snapshot.data(), count},
+#else
   return io::scatter_write(std::span<const Iovec32>{snapshot.data(), count},
-      [descriptor](u32 base, u32 size) { return write(descriptor, base, size); },
+#endif
+      [descriptor](uword base, uword size) {
+        if (!user_memory.contains(base, size)) return error(Errno::bad_address);
+        return write(descriptor, static_cast<u32>(base), static_cast<u32>(size));
+      },
       error(Errno::invalid_argument));
 }
 
@@ -4504,7 +4526,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return static_cast<i32>(size);
 }
 
-[[nodiscard]] i32 mmap(u32 address, u32 size, u32 flags) {
+[[nodiscard]] iword mmap(u32 address, u32 size, u32 flags) {
   constexpr u32 map_fixed = 0x10;
   if (size == 0) {
     return error(Errno::invalid_argument);
@@ -4517,12 +4539,17 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
     if (!user_memory.contains(address, rounded)) {
       return error(Errno::no_memory);
     }
-    return static_cast<i32>(address);
+    return static_cast<iword>(address);
   }
 #ifdef OSPLAY_EXTREME_USERSPACE
   const u32 allocation_end = user_heap_end;
 #else
+#ifdef OSPLAY_VENUS
+  const u32 allocation_end = process.mmap_begin == abi::venus::heap_begin ?
+      abi::venus::heap_end : user_stack_top;
+#else
   const u32 allocation_end = user_stack_top;
+#endif
 #endif
   const u32 result = process.mmap_cursor;
   if (!user_memory.contains(result, rounded) ||
@@ -4532,7 +4559,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   }
   process.mmap_cursor += rounded;
   memset(reinterpret_cast<void*>(result), 0, rounded);
-  return static_cast<i32>(result);
+  return static_cast<iword>(result);
 }
 
 [[nodiscard]] i32 prlimit(u32 old_limit) {
@@ -4599,7 +4626,26 @@ void deliver_pending_signal(TrapFrame& frame) {
   deliver_pending_signal_impl(frame);
 }
 
-i32 dispatch_syscall(TrapFrame& frame) {
+iword dispatch_syscall(TrapFrame& frame) {
+#ifdef OSPLAY_VENUS
+  if (frame.x[17] == abi::venus::cache_range) {
+    const u64 address = frame.x[10], bytes = frame.x[11], discard = frame.x[12];
+    if (!user_memory.cache_access(address, bytes, discard))
+      return error(Errno::bad_address);
+    // The permitted arenas have cache-line-aligned boundaries; rounding
+    // cannot grant access to kernel, HTIF, rootfs or the weights disk.
+    const u64 end = align_up(address + bytes, u64{64});
+    asm volatile("fence rw, rw" : : : "memory");
+    for (u64 line = align_down(address, u64{64}); line < end; line += 64) {
+      if (discard)
+        asm volatile(".insn i 0x73, 0, zero, %0, -62" : : "r"(line) : "memory");
+      else
+        asm volatile(".insn i 0x73, 0, zero, %0, -64" : : "r"(line) : "memory");
+    }
+    asm volatile("fence rw, rw" : : : "memory");
+    return 0;
+  }
+#endif
 #ifdef OSPLAY_EXTREME_USERSPACE
   if (frame.x[17] == 4095) { active_signal_frame = {}; return 0; }
 #endif
@@ -4663,13 +4709,13 @@ i32 dispatch_syscall(TrapFrame& frame) {
       return writev(a0, a1, a2);
     case Syscall::pselect6:
 #if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
-      return pselect6(frame, a0, a1, a2, a3, a4, false);
+      return pselect6(frame, a0, a1, a2, a3, a4, sizeof(uword) == 8);
 #else
       return unknown(number);
 #endif
     case Syscall::ppoll:
 #if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
-      return ppoll(frame, a0, a1, a2, false);
+      return ppoll(frame, a0, a1, a2, sizeof(uword) == 8);
 #else
       return unknown(number);
 #endif
@@ -4767,16 +4813,20 @@ i32 dispatch_syscall(TrapFrame& frame) {
       return 0;
     case Syscall::brk:
       if (a0 == 0) {
-        return static_cast<i32>(process.brk);
+        return static_cast<iword>(process.brk);
       }
-#ifdef OSPLAY_EXTREME_USERSPACE
+#ifdef OSPLAY_VENUS
+      // brk belongs to the low executable image, not the mmap arena. Never
+      // grow it through the reserved HTIF/rootfs gap between the two regions.
+      if (a0 >= process.mutable_begin && a0 <= user_stack_top - 1024*1024) {
+#elif defined(OSPLAY_EXTREME_USERSPACE)
       if (a0 >= process.mutable_begin && a0 <= process.mmap_begin) {
 #else
       if (a0 >= user_begin && a0 < process.mmap_cursor) {
 #endif
         process.brk = a0;
       }
-      return static_cast<i32>(process.brk);
+      return static_cast<iword>(process.brk);
     case Syscall::clone:
       return clone(frame, a0, a1, a4);
     case Syscall::execve:
@@ -4800,7 +4850,7 @@ i32 dispatch_syscall(TrapFrame& frame) {
     case Syscall::getrandom:
       return getrandom(a0, a1);
     case Syscall::clock_gettime32:
-      return clock_gettime(a1, false);
+      return clock_gettime(a1, sizeof(uword) == 8);
     case Syscall::clock_gettime64:
       return clock_gettime(a1, true);
     case Syscall::clock_nanosleep64:

@@ -57,6 +57,10 @@ void loop_close(u32 index);
 [[nodiscard]] Result<u32> loop_write(u32 index, u64 offset, const u8* input, u32 count);
 [[nodiscard]] Error mount_loop(u32 index, const char* target, bool read_only,
                                const char* type = "ext4");
+// Mount an existing memory image without allocating or copying its contents.
+// The caller owns the bytes until unmount; the ordinary Volume/parser is used.
+[[nodiscard]] Error mount_memory(u8* bytes, u64 size, const char* target,
+                                 bool read_only = true);
 [[nodiscard]] Error unmount(const char* target);
 [[nodiscard]] bool mount_contains(const char* path);
 [[nodiscard]] const char* mount_table();

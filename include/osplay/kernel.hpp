@@ -4,6 +4,9 @@
 #include <osplay/net/interface.hpp>
 #include <osplay/net/socket.hpp>
 #include <osplay/scheduler.hpp>
+#ifdef OSPLAY_VENUS
+#include <osplay/abi/venus.hpp>
+#endif
 
 namespace osplay {
 
@@ -14,12 +17,41 @@ inline constexpr u32 user_end = EC_BUS_BYTES * EC_BANK_WORDS * EC_BANKS;
 extern u32 user_stack_top;
 extern u32 user_heap_end;
 #else
+#ifdef OSPLAY_RV64
+// The installed RV64 glibc uses medlow: keep flat userspace below 2 GiB.
+inline constexpr u32 ram_begin = 0x40000000;
+inline constexpr u32 user_begin = 0x41000000;
+inline constexpr u32 user_end = 0x42000000;
+inline constexpr u32 user_stack_top = 0x41fff000;
+#else
 inline constexpr u32 ram_begin = 0x80000000;
 inline constexpr u32 user_begin = 0x81000000;
 inline constexpr u32 user_end = 0x82000000;
 inline constexpr u32 user_stack_top = 0x81fff000;
 #endif
+#endif
+#ifdef OSPLAY_VENUS
+// Keep executable/stack addresses low, and leave HTIF/rootfs/weights outside
+// userspace. The additional arena is initially sufficient for accelerator
+// BIST; the model's multi-GiB allocations need a separate RV64 extension.
+struct UserMemory {
+  [[nodiscard]] constexpr bool contains(uword address, uword size) const {
+    return UserRange{user_begin, user_end}.contains(address, size) ||
+           UserRange{abi::venus::heap_begin, abi::venus::heap_end}.contains(address, size);
+  }
+  [[nodiscard]] constexpr bool aligned(u32 address, u32 alignment) const {
+    return UserRange{user_begin, user_end}.aligned(address, alignment);
+  }
+  [[nodiscard]] constexpr bool cache_access(u64 address, u64 bytes, u64 discard) const {
+    const bool dma = address >= abi::venus::dma_begin && address <= abi::venus::dma_end &&
+                     bytes <= abi::venus::dma_end - address;
+    return discard <= 1 && (dma || contains(address, bytes));
+  }
+};
+inline constexpr UserMemory user_memory{};
+#else
 inline constexpr UserRange user_memory{user_begin, user_end};
+#endif
 
 struct Process {
   u32 brk;
@@ -45,7 +77,7 @@ void uart_write(const char* data, u32 size);
 void write_text(const char* text);
 void write_u32(u32 value);
 [[noreturn]] void shutdown(u32 code);
-i32 dispatch_syscall(TrapFrame& frame);
+iword dispatch_syscall(TrapFrame& frame);
 void deliver_pending_signal(TrapFrame& frame);
 void start_stress_ng(TrapFrame& frame);
 void restore_busybox_image();

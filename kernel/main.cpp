@@ -2,6 +2,9 @@
 #include <drivers/fs/root.hpp>
 #include <drivers/uart/uart.hpp>
 #include <osplay/kernel.hpp>
+#ifdef OSPLAY_RV64
+#include <drivers/storage/rocket_ramdisk.hpp>
+#endif
 
 extern "C" void* memcpy(void*, const void*, osplay::usize);
 extern "C" void* memset(void*, int, osplay::usize);
@@ -32,9 +35,9 @@ struct [[gnu::packed]] ElfHeader {
   u16 type;
   u16 machine;
   u32 version;
-  u32 entry;
-  u32 program_offset;
-  u32 section_offset;
+  uword entry;
+  uword program_offset;
+  uword section_offset;
   u32 flags;
   u16 header_size;
   u16 program_entry_size;
@@ -46,13 +49,18 @@ struct [[gnu::packed]] ElfHeader {
 
 struct [[gnu::packed]] ProgramHeader {
   u32 type;
-  u32 offset;
-  u32 virtual_address;
-  u32 physical_address;
-  u32 file_size;
-  u32 memory_size;
+#ifdef OSPLAY_RV64
   u32 flags;
-  u32 alignment;
+#endif
+  uword offset;
+  uword virtual_address;
+  uword physical_address;
+  uword file_size;
+  uword memory_size;
+#ifndef OSPLAY_RV64
+  u32 flags;
+#endif
+  uword alignment;
 };
 
 struct Image {
@@ -64,14 +72,14 @@ struct Image {
 };
 
 struct Aux {
-  u32 type;
-  u32 value;
+  uword type;
+  uword value;
 };
 
 [[nodiscard]] bool valid_elf(const ElfHeader& header, u32 file_size) {
   return header.ident[0] == 0x7f && header.ident[1] == 'E' &&
          header.ident[2] == 'L' && header.ident[3] == 'F' &&
-         header.ident[4] == 1 && header.ident[5] == 1 && header.type == 2 &&
+         header.ident[4] == (sizeof(uword) == 8 ? 2 : 1) && header.ident[5] == 1 && header.type == 2 &&
          header.machine == 243 &&
          user_memory.contains(header.entry, 1) &&
          header.program_entry_size == sizeof(ProgramHeader) &&
@@ -187,7 +195,7 @@ template <typename Reader>
     memset(destination + segment.file_size, 0,
            segment.memory_size - segment.file_size);
   }
-  image = Image{header.entry,
+  image = Image{static_cast<u32>(header.entry),
                 program_headers,
                 header.program_count,
                 align_up(image_end, static_cast<u32>(4096)),
@@ -329,8 +337,8 @@ void copy_path(char* output, const char* input) {
       1 + argument_count + 1 + environment_count + 1 +
       sizeof(aux) / sizeof(aux[0]) * 2;
   const u32 stack = align_down(
-      cursor - words * sizeof(u32), static_cast<u32>(16));
-  auto* out = reinterpret_cast<u32*>(stack);
+      cursor - words * static_cast<u32>(sizeof(uword)), static_cast<u32>(16));
+  auto* out = reinterpret_cast<uword*>(stack);
   *out++ = argument_count;
   for (u32 i = 0; i < argument_count; ++i) {
     *out++ = argument_addresses[i];
@@ -374,6 +382,24 @@ void disable_interrupt_controllers() {
 
 #ifndef OSPLAY_TRIBE
 [[nodiscard]] bool protect_kernel() {
+#ifdef OSPLAY_VENUS
+  // Explicit device/DMA apertures precede the user TOR regions. A denying TOR
+  // entry at index zero would shadow every later MMIO permission.
+  constexpr u64 mmio = (abi::venus::mmio_begin >> 2) | (abi::venus::mmio_size/8 - 1);
+  constexpr u64 dma = (abi::venus::dma_begin >> 2) |
+                      ((abi::venus::dma_end - abi::venus::dma_begin)/8 - 1);
+  asm volatile("csrw pmpaddr0, %0" : : "r"(mmio));
+  asm volatile("csrw pmpaddr1, %0" : : "r"(dma));
+  asm volatile("csrw pmpaddr2, %0" : : "r"(u64(user_begin) >> 2));
+  asm volatile("csrw pmpaddr3, %0" : : "r"(u64(user_end) >> 2));
+  asm volatile("csrw pmpaddr4, %0" : : "r"(u64(abi::venus::heap_begin) >> 2));
+  asm volatile("csrw pmpaddr5, %0" : : "r"(u64(abi::venus::heap_end) >> 2));
+  constexpr u64 config = 0x00000b080f001b1bULL;
+  asm volatile("csrw pmpcfg0, %0" : : "r"(config));
+  u64 actual;
+  asm volatile("csrr %0, pmpcfg0" : "=r"(actual));
+  return actual == config;
+#else
   const u32 lower_top = user_begin >> 2;
   const u32 user_top = user_end >> 2;
   asm volatile("csrw pmpaddr0, %0" : : "r"(lower_top));
@@ -385,6 +411,7 @@ void disable_interrupt_controllers() {
   u32 actual;
   asm volatile("csrr %0, pmpcfg0" : "=r"(actual));
   return (actual & 0xffffu) == config;
+#endif
 }
 #endif
 
@@ -434,8 +461,13 @@ bool replace_with_executable(TrapFrame& frame, const char* path,
   }
   process.brk = image.brk;
   process.mutable_begin = image.mutable_begin;
+#ifdef OSPLAY_VENUS
+  if (process.brk > user_stack_top - 1024*1024)
+    return false;
+  process.mmap_begin = abi::venus::heap_begin;
+#else
   if (busybox) {
-    process.mmap_begin = 0x81800000;
+    process.mmap_begin = user_begin + 0x800000;
   } else {
     constexpr u32 heap_reserve = 512 * 1024;
     if (process.brk > user_stack_top - heap_reserve) {
@@ -444,6 +476,7 @@ bool replace_with_executable(TrapFrame& frame, const char* path,
     process.mmap_begin = align_up(process.brk + heap_reserve,
                                   static_cast<u32>(4096));
   }
+#endif
   process.mmap_cursor = process.mmap_begin;
   const u32 stack = make_initial_stack(image, arguments, argument_count,
                                        environment, environment_count);
@@ -594,6 +627,12 @@ extern "C" void kernel_main() {
     shutdown(8);
   }
   write_text("OSPLAY:EXT4_ROOT_OK\n");
+#ifdef OSPLAY_RV64
+  if (!drivers::storage::initialize_rocket_ramdisk()) {
+    write_text("OSPLAY:WEIGHTS_DISK_FAIL\n");
+    shutdown(9);
+  }
+#endif
   const auto image = required_image(
       "/bin/busybox", false,
 #ifdef OSPLAY_INTERACTIVE
@@ -604,7 +643,11 @@ extern "C" void kernel_main() {
   );
   process.brk = image.brk;
   process.mutable_begin = image.mutable_begin;
-  process.mmap_begin = 0x81800000;
+#ifdef OSPLAY_VENUS
+  process.mmap_begin = abi::venus::heap_begin;
+#else
+  process.mmap_begin = user_begin + 0x800000;
+#endif
   process.mmap_cursor = process.mmap_begin;
   process.pid = 1;
   process.parent_pid = 0;
@@ -612,7 +655,7 @@ extern "C" void kernel_main() {
   process.session = 1;
   copy_path(process.current_directory, "/");
   copy_path(process.executable_path, "/bin/busybox");
-#ifdef OSPLAY_ROCKET_RAMDISK_TEST
+#if defined(OSPLAY_ROCKET_RAMDISK_TEST) || defined(OSPLAY_ROCKET_APPLICATION_TEST)
   // Exercise the real interactive shell and syscalls without unrelated SSH
   // startup or the listener's expensive flat-address-space image swaps.
   constexpr const char* arguments[] = {"busybox", "sh", "-i", "+m"};
@@ -787,7 +830,7 @@ extern "C" void trap_handler(osplay::TrapFrame* frame) {
 #endif
   }
   if (frame->mcause == user_ecall) {
-    frame->x[10] = static_cast<u32>(dispatch_syscall(*frame));
+    frame->x[10] = static_cast<uword>(dispatch_syscall(*frame));
     if (process.image_replaced) {
       process.image_replaced = false;
     } else {

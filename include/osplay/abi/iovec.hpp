@@ -10,6 +10,10 @@ struct [[gnu::packed]] Iovec32 {
   u32 base;
   u32 size;
 };
+struct [[gnu::packed]] Iovec64 {
+  u64 base;
+  u64 size;
+};
 static_assert(sizeof(Iovec32) == 8);
 static_assert(std::is_trivially_copyable_v<Iovec32> &&
               std::is_standard_layout_v<Iovec32>);

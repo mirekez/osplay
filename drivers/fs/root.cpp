@@ -30,6 +30,8 @@ public:
     ByteDevice device;
     Volume volume;
     LoopStatus status;
+    u8 *memory{};
+    u64 memory_size{};
     char target[256]{};
     char type[5]{"ext4"};
     u32 opens{}, files{}, generation{};
@@ -104,7 +106,7 @@ public:
     if (node.filesystem != 0)
       return false;
     for (const auto &loop : loops)
-      if (loop.attached && loop.status.backing.inode == node.inode)
+      if (loop.attached && !loop.memory && loop.status.backing.inode == node.inode)
         return true;
     return false;
   }
@@ -130,6 +132,8 @@ public:
     if (index >= loop_capacity || !loops[index].attached)
       return 0;
     const auto &status = loops[index].status;
+    if (loops[index].memory)
+      return loops[index].memory_size;
     const u64 available = status.backing.size - status.offset;
     const u64 size = status.size_limit == 0 || status.size_limit > available
                          ? available
@@ -137,16 +141,24 @@ public:
     return size - size % 512;
   }
   Result<u32> loop_read(u32 index, u64 offset, u8 *output, u32 count) {
+    if (output == nullptr && count != 0)
+      return std::unexpected(Error::invalid_argument);
     if (index >= loop_capacity || !loops[index].attached)
       return std::unexpected(Error::not_found);
     const u64 size = loop_size(index);
     if (offset > size || count > size - offset)
       return std::unexpected(Error::out_of_bounds);
+    if (loops[index].memory) {
+      if (count != 0) std::memcpy(output, loops[index].memory + offset, count);
+      return count;
+    }
     return volume.read(loops[index].status.backing,
                        loops[index].status.offset + offset, output, count);
   }
   Result<u32> loop_write(u32 index, u64 offset, const u8 *input, u32 count,
                          bool internal) {
+    if (input == nullptr && count != 0)
+      return std::unexpected(Error::invalid_argument);
     if (index >= loop_capacity || !loops[index].attached)
       return std::unexpected(Error::not_found);
     auto &loop = loops[index];
@@ -157,6 +169,10 @@ public:
     const u64 size = loop_size(index);
     if (offset > size || count > size - offset)
       return std::unexpected(Error::out_of_bounds);
+    if (loop.memory) {
+      if (count != 0) std::memcpy(loop.memory + offset, input, count);
+      return count;
+    }
     return volume.write(loop.status.backing, loop.status.offset + offset, input,
                         count);
   }
@@ -166,6 +182,8 @@ public:
         (loop.status.flags & abi::loop::autoclear)) {
       loop.attached = false;
       loop.status = {};
+      loop.memory = nullptr;
+      loop.memory_size = 0;
     }
   }
 };
@@ -324,6 +342,8 @@ Error loop_configure(u32 index, u64 offset, u64 limit, u32 flags,
   if (index >= loop_capacity || !filesystem.loops[index].attached)
     return Error::not_found;
   auto &loop = filesystem.loops[index];
+  if (loop.memory)
+    return Error::unsupported;
   if (loop.mounted)
     return Error::busy;
   if ((flags & ~(abi::loop::read_only | abi::loop::autoclear)) != 0 ||
@@ -342,6 +362,8 @@ Error loop_configure(u32 index, u64 offset, u64 limit, u32 flags,
   return Error::none;
 }
 Result<LoopStatus> loop_status(u32 index) {
+  if (index < loop_capacity && filesystem.loops[index].memory)
+    return std::unexpected(Error::unsupported);
   return index < loop_capacity && filesystem.loops[index].attached
              ? Result<LoopStatus>{filesystem.loops[index].status}
              : Result<LoopStatus>{std::unexpected(Error::not_found)};
@@ -357,6 +379,8 @@ Error loop_detach(u32 index) {
     return error;
   loop.attached = false;
   loop.status = {};
+  loop.memory = nullptr;
+  loop.memory_size = 0;
   return Error::none;
 }
 u64 loop_size(u32 index) { return filesystem.loop_size(index); }
@@ -426,6 +450,28 @@ Error unmount(const char *target) {
   }
   return Error::invalid_argument;
 }
+Error mount_memory(u8 *bytes, u64 size, const char *target, bool ro) {
+  if (!filesystem.ready || bytes == nullptr || size < 2048 || size % 512 != 0 ||
+      size > static_cast<u64>(~usize{0}))
+    return Error::invalid_argument;
+  const i32 slot = free_loop();
+  if (slot < 0)
+    return Error::no_space;
+  auto &loop = filesystem.loops[slot];
+  loop.memory = bytes;
+  loop.memory_size = size;
+  loop.status = {};
+  loop.status.flags = abi::loop::autoclear | (ro ? abi::loop::read_only : 0);
+  loop.attached = true;
+  const Error error = mount_loop(static_cast<u32>(slot), target, ro, "ext2");
+  if (error != Error::none) {
+    loop.attached = false;
+    loop.memory = nullptr;
+    loop.memory_size = 0;
+    loop.status = {};
+  }
+  return error;
+}
 bool mount_contains(const char *path) {
   return path != nullptr && filesystem.route(path) != loop_capacity;
 }
@@ -451,7 +497,7 @@ const char *mount_table() {
     const auto &loop = filesystem.loops[i];
     if (!loop.mounted)
       continue;
-    append("/dev/loop");
+    append(loop.memory ? "/dev/ram" : "/dev/loop");
     text[cursor++] = char('0' + i);
     append(" ");
     append(loop.target, true);

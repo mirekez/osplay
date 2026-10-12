@@ -1,0 +1,87 @@
+OUTPUT_ARCH(riscv)
+ENTRY(_start)
+
+SECTIONS
+{
+  . = 0x40000000;
+  __kernel_begin = .;
+
+  .text : ALIGN(16) {
+    KEEP(*(.text.boot))
+    *(.text .text.*)
+  }
+
+  .rodata : ALIGN(16) {
+    *(.rodata .rodata.*)
+  }
+
+  .data : ALIGN(16) {
+    *(.data .data.*)
+    *(.sdata .sdata.*)
+  }
+  __kernel_image_end = .;
+  ASSERT(__kernel_image_end - __kernel_begin <= 500000,
+         "kernel text/rodata/data exceed 500 kB")
+
+  .bss (NOLOAD) : ALIGN(16) {
+    __bss_begin = .;
+    *(.bss .bss.*)
+    *(.sbss .sbss.*)
+    *(COMMON)
+    __bss_end = .;
+  }
+
+  /* Large syscall scratch storage does not need boot-time zeroing. */
+  .noinit (NOLOAD) : ALIGN(16) {
+    *(.noinit .noinit.*)
+  }
+
+  . = ALIGN(16);
+  __kernel_stack_bottom = .;
+  . += 64K;
+  __kernel_stack_top = .;
+  __kernel_end = .;
+
+  /*
+   * Fork snapshots use the otherwise unoccupied physical RAM between the
+   * kernel and the first user image. The arena is not an ELF section: it has
+   * no load-time contents and allocations are initialized by the kernel.
+   */
+  __fork_snapshot_arena_begin = ALIGN(16);
+  __fork_snapshot_arena_end = 0x41000000;
+
+  /*
+   * Interactive Tribe kernels preload the BusyBox file at the same address
+   * as its first PT_LOAD segment. The section is empty for all other kernels.
+   * Keeping it out of __kernel_end preserves the kernel/user boundary check.
+   */
+  .user_busybox 0x41000000 : ALIGN(16) {
+    __embedded_busybox_begin = .;
+    KEEP(*(.user_busybox))
+    __embedded_busybox_end = .;
+  }
+
+  .user_dropbear 0x41400000 : ALIGN(16) {
+    __embedded_dropbear_begin = .;
+    KEEP(*(.user_dropbear))
+    __embedded_dropbear_end = .;
+  }
+
+  /DISCARD/ : {
+    *(.comment)
+    *(.eh_frame*)
+    *(.riscv.attributes)
+  }
+
+  ASSERT(__kernel_end < 0x41000000, "kernel overlaps user image")
+  ASSERT(__fork_snapshot_arena_begin < __fork_snapshot_arena_end,
+         "no physical RAM remains for fork snapshots")
+}
+SECTIONS {
+  .tohost 0x43000000 : ALIGN(64) { KEEP(*(.tohost)) }
+  .rocket_disk 0x44000000 : ALIGN(4096) {
+    __rocket_disk_begin = .;
+    KEEP(*(.rocket_disk))
+    __rocket_disk_end = .;
+  }
+}

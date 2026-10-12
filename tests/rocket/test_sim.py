@@ -58,24 +58,29 @@ def echo_ok(frame):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("boot", "ping", "process", "ramdisk"))
+    parser.add_argument("mode", choices=("boot", "ping", "process", "ramdisk", "weights", "application"))
     args = parser.parse_args()
-    out = ROOT / "build/tests/rocket"
+    out = Path(os.environ.get("OSPLAY_ROCKET_TEST_LOG_DIR", ROOT / "build/tests/rocket"))
     out.mkdir(parents=True, exist_ok=True)
     log_path = out / (args.mode + ".log")
     started = time.monotonic()
-    default_timeout = "7200" if args.mode in ("process", "ramdisk") else "3600"
+    default_timeout = "7200" if args.mode in ("process", "ramdisk", "weights", "application") else "3600"
     deadline = started + float(os.environ.get("ROCKET_TIMEOUT", default_timeout))
     with tempfile.TemporaryDirectory(prefix="osplay-rocket-") as runtime, \
             socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as peer, \
-            log_path.open("wb", buffering=0) as log:
+            log_path.open("wb", buffering=0) as log, \
+            (out / (args.mode + ".runtime.log")).open("wb", buffering=0) as diagnostics:
         path = str(Path(runtime) / "net.sock")
         peer.bind(path)
         peer.setblocking(False)
         env = dict(os.environ, ROCKET_ETH_SOCKET=path)
-        proc = subprocess.Popen(["bash", str(ROOT / "tests/rocket/run_rocket.sh")],
+        command = ["bash", str(ROOT / "tests/rocket/run_rocket.sh")]
+        if os.environ.get("OSPLAY_ROCKET_SIMULATOR"):
+            command = [os.environ["OSPLAY_ROCKET_SIMULATOR"], os.environ["OSPLAY_ROCKET_KERNEL"]]
+        proc = subprocess.Popen(command,
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, env=env)
+                                stderr=diagnostics if os.environ.get("OSPLAY_ROCKET_SIMULATOR")
+                                else subprocess.STDOUT, env=env)
         selector = selectors.DefaultSelector()
         selector.register(peer, selectors.EVENT_READ)
         selector.register(proc.stdout, selectors.EVENT_READ)
@@ -114,7 +119,8 @@ def main():
                                "OSPLAY_SSH_NET_CONFIG_START", "OSPLAY_SSH_NET_CONFIG_DONE",
                                "OSPLAY_SSH_DROPBEAR_START",
                                "ROCKET_PROCESS_OK", "ROCKET_RAMDISK_FORMAT_OK",
-                               "ROCKET_RAMDISK_UNMOUNT_OK", "ROCKET_RAMDISK_OK"):
+                               "ROCKET_RAMDISK_UNMOUNT_OK", "ROCKET_RAMDISK_OK",
+                               "OSPLAY:WEIGHTS_MOUNT_OK", "OSPLAY:WEIGHTS_CHECK_OK"):
                     if marker + "\n" in text and marker not in reported:
                         reported.add(marker)
                         print(f"[{time.monotonic() - started:.1f}s] {marker}", flush=True)
@@ -135,9 +141,19 @@ def main():
                     except (BlockingIOError, ConnectionRefusedError, FileNotFoundError):
                         pass
                     next_packet = time.monotonic() + 30
-                ready = "/ # " in text and (args.mode in ("process", "ramdisk") or echo)
+                ready = "/ # " in text and (args.mode in ("process", "ramdisk", "weights", "application") or echo)
                 if ready and not sent_command:
-                    if args.mode == "ramdisk":
+                    if args.mode == "application":
+                        command = ("set -e\n" + os.environ["OSPLAY_ROCKET_APP_COMMAND"] +
+                                   "\necho ROCKET_APPLICATION_OK\nexit\n")
+                    elif args.mode == "weights":
+                        command = ("set -e\n"
+                                   "test -f /weights/manifest.json\n"
+                                   "test -f /weights/model_embed_tokens_weight.bin\n"
+                                   "wc -c /weights/manifest.json\n"
+                                   "cat /proc/mounts\n"
+                                   "echo ROCKET_WEIGHTS_OK\nexit\n")
+                    elif args.mode == "ramdisk":
                         command = (
                             "set -e; mkdir /ramdisk /ramdisk-sibling; "
                             "dd if=/dev/zero of=/ramdisk.img bs=1024 count=64; "
@@ -181,7 +197,8 @@ def main():
                         if marker + "\n" not in text:
                             raise RuntimeError(f"missing {marker}")
                     marker = {"ping": "ROCKET_SHELL_OK", "process": "ROCKET_PROCESS_OK",
-                              "ramdisk": "ROCKET_RAMDISK_OK"}[args.mode]
+                              "ramdisk": "ROCKET_RAMDISK_OK", "weights": "ROCKET_WEIGHTS_OK",
+                              "application": "ROCKET_APPLICATION_OK"}[args.mode]
                     if "\n" + marker + "\n" not in text or not sent_command:
                         raise RuntimeError("UART shell command was not executed")
                     if args.mode == "process" and text.splitlines().count("ROCKET_FILE_OK") != 2:
@@ -192,6 +209,15 @@ def main():
                         for stage in ("ROCKET_RAMDISK_FORMAT_OK", "ROCKET_RAMDISK_UNMOUNT_OK"):
                             if "\n" + stage + "\n" not in text:
                                 raise RuntimeError(f"missing {stage}")
+                    if args.mode == "weights":
+                        for stage in ("OSPLAY:WEIGHTS_MOUNT_OK", "OSPLAY:WEIGHTS_CHECK_OK"):
+                            if stage + "\n" not in text:
+                                raise RuntimeError(f"missing {stage}")
+                        if "/dev/ram0 /weights ext2 ro 0 0\n" not in text:
+                            raise RuntimeError("weights disk is absent from guest mount table")
+                    if args.mode == "application":
+                        if "\n" + os.environ["OSPLAY_ROCKET_APP_MARKER"] + "\n" not in text:
+                            raise RuntimeError("application success marker is absent")
                     print(f"PASS: Rocket {args.mode}, ext4, U-mode BusyBox and clean HTIF exit; log: {log_path}")
                     return
             raise RuntimeError(f"timeout, last output:\n{text[-3000:]}")
@@ -205,6 +231,7 @@ def main():
                     proc.wait()
             selector.close()
             Path(f"/tmp/osplay-rocket-net-{proc.pid}.sock").unlink(missing_ok=True)
+            Path(f"/tmp/venus-osplay-net-{proc.pid}.sock").unlink(missing_ok=True)
             print(f"UART log: {log_path}", flush=True)
 
 

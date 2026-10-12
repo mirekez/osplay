@@ -8,12 +8,19 @@ using u32 = __UINT32_TYPE__;
 using u64 = __UINT64_TYPE__;
 using i32 = __INT32_TYPE__;
 using usize = __SIZE_TYPE__;
+#ifdef OSPLAY_RV64
+using uword = u64;
+using iword = __INT64_TYPE__;
+#else
+using uword = u32;
+using iword = i32;
+#endif
 
 struct UserRange {
   u32 begin;
   u32 end;
 
-  [[nodiscard]] constexpr bool contains(u32 address, u32 size) const {
+  [[nodiscard]] constexpr bool contains(uword address, uword size) const {
     return address >= begin && address <= end && size <= end - address;
   }
 
@@ -23,14 +30,16 @@ struct UserRange {
   }
 };
 
-template <typename T>
-[[nodiscard]] constexpr T align_up(T value, T alignment) {
-  return static_cast<T>((value + alignment - 1) & ~(alignment - 1));
+template <typename T, typename A>
+[[nodiscard]] constexpr T align_up(T value, A alignment) {
+  const T mask = static_cast<T>(alignment) - 1;
+  return (value + mask) & ~mask;
 }
 
-template <typename T>
-[[nodiscard]] constexpr T align_down(T value, T alignment) {
-  return static_cast<T>(value & ~(alignment - 1));
+template <typename T, typename A>
+[[nodiscard]] constexpr T align_down(T value, A alignment) {
+  const T mask = static_cast<T>(alignment) - 1;
+  return value & ~mask;
 }
 
 }  // namespace osplay

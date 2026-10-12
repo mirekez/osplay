@@ -4,8 +4,9 @@
 
 namespace osplay::arch {
 
-inline constexpr u32 scheduler_timer_cause = 0x80000007;
-inline constexpr u32 tribe_user_timer_cause = 0x80000005;
+inline constexpr uword interrupt_bit = uword{1} << (sizeof(uword)*8-1);
+inline constexpr uword scheduler_timer_cause = interrupt_bit | 7;
+inline constexpr uword tribe_user_timer_cause = interrupt_bit | 5;
 
 void start_scheduler_timer();
 void rearm_scheduler_timer();

@@ -1,8 +1,58 @@
 # OSplay on Rocket
 
-This profile runs the real Chipyard **RV32 Rocket RTL in Verilator**, not an ISA
-emulator. OSplay and its current Linux-compatible userspace ABI are RV32. This
-does not claim RV64 userspace support or a C++HDL simulator backend.
+The original scripts in this directory run real Chipyard **RV32 Rocket RTL in
+Verilator**, not an ISA emulator. A separate RV64 kernel/userspace build is
+available for Venus's native-graph integration, described below. The RV32
+scripts and their hardware configuration are unchanged.
+
+## RV64 Venus integration
+
+From a Venus checkout containing this OSplay tree:
+
+```bash
+bash deploy/run_osplay_mlaccel.sh --build-only
+bash deploy/run_osplay_mlaccel.sh --boot-test
+bash deploy/run_osplay_mlaccel.sh --test
+```
+
+The launcher uses `VenusOSplayRocketConfig`: one RV64 Rocket, two DRAM channels,
+Venus, SIMD, RoCC, and the standard coherent IceNIC DMA engine. The complete
+hardware design runs in cpphdl native graph. UART, raw Ethernet frames and
+external DRAM are host boundary services, not device emulations replacing DMA.
+The NIC TX limiter permits five 64-bit flits per sixteen 50 MHz clocks: a
+1 Gbit/s frame-byte rate, excluding Ethernet PHY/FCS/inter-frame-gap overhead.
+
+`rocket64-kernel` builds `build/osplay-rocket-rv64.elf`, using separate
+`build/rocket64` objects. Userspace lives in `build/tests/busybox-rv64` and
+requires a static RV64 Linux toolchain. This flat LP64D profile maps 8 GiB
+DRAM at `0x40000000`, BusyBox at `0x41000000`, Dropbear at `0x41400000`, HTIF
+at `0x43000000`, and the ext4 RAM disk at `0x44000000`. These low addresses
+support the toolchain's medlow glibc. Trap handling preserves all FP registers.
+M-mode kernel/U-mode userspace still use PMP with virtual translation disabled.
+
+No sudo is required for the default network mode. The new
+[rootless Ethernet proxy](../network/README.md) forwards host
+`127.0.0.1:2222` to guest `192.168.76.2:22`; it does not bypass the NIC or guest
+TCP/IP stack. `--tap` selects the existing TAP helper instead. Interactive mode
+prints the exact `dbclient` command; `--test` waits for Dropbear, runs shell/file
+commands over SSH, then requests a clean UART/HTIF shutdown. `--boot-test`
+independently checks DMA ARP/ICMP replies and UART shell commands.
+
+The Venus deployment can preload a separate 3 GiB ext2 weights image at
+`0x80000000`, mounted read-only at `/weights`, using
+`bash deploy/run_osplay_mlaccel.sh --weights DIR`. The two DRAM channels share
+an interleaved physical address space; this reserves an address range, not a
+whole independently addressed channel. Host image loading happens before
+reset; file reads still execute on Rocket through the ordinary filesystem.
+`--disk-test` uses a focused shell without Dropbear startup, verifies all file
+sizes and four byte ranges per file in the kernel, checks U-mode file access
+and `/proc/mounts`, and requires exit 0. Its default source is
+`~/harpy/cpuml/Llama3.2_1B-Instruct/weights_fp16`. The ordinary small rootfs and
+all RV32 profiles are unchanged. The backing bytes must outlive their memory
+mount; `root::mount_memory` does not copy or own them.
+
+Logs are saved by the Venus launcher. Build and unit-test success alone do not
+establish that guest SSH works; the full `--test` must pass for that claim.
 
 ## Build and test
 

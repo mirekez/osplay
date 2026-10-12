@@ -14,18 +14,18 @@ cat > "$scratch/check.c" <<'EOF'
 #include <features.h>
 #include <limits.h>
 #include <stdio.h>
-#if !defined(__GLIBC__) || !defined(__riscv) || __riscv_xlen != 32
-#error OSplay userspace requires RV32 glibc
+#if !defined(__GLIBC__) || !defined(__riscv) || __riscv_xlen != OSPLAY_USER_XLEN
+#error OSplay userspace requires matching RISC-V glibc
 #endif
-#if !defined(__riscv_float_abi_soft) || defined(__riscv_flen)
+#if OSPLAY_USER_XLEN == 32 && (!defined(__riscv_float_abi_soft) || defined(__riscv_flen))
 #error Tribe userspace requires ILP32 without floating-point instructions
 #endif
-#if !defined(LONG_BIT) || LONG_BIT != 32
+#if !defined(LONG_BIT) || LONG_BIT != OSPLAY_USER_XLEN
 #error Complete GCC system headers are required; finish the final compiler stage
 #endif
 int main(void) { return puts("OSplay toolchain check") < 0; }
 EOF
-if ! "${prefix}gcc" -static "$scratch/check.c" -o "$scratch/check" > "$scratch/log" 2>&1; then
+if ! "${prefix}gcc" -DOSPLAY_USER_XLEN="${OSPLAY_USER_XLEN:-32}" -static "$scratch/check.c" -o "$scratch/check" > "$scratch/log" 2>&1; then
   echo "RV32 Linux toolchain unusable: ${prefix}gcc" >&2
   cat "$scratch/log" >&2
   echo 'A complete RV32/ILP32 glibc toolchain with static libraries is required. Run make userspace-toolchain, or set RISCV_LINUX_PREFIX.' >&2

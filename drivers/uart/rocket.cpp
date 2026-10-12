@@ -1,4 +1,7 @@
 #include <drivers/uart/uart.hpp>
+#ifdef OSPLAY_HTIF_UART_TRACE
+extern "C" volatile osplay::u64 tohost;
+#endif
 
 namespace osplay::drivers::uart {
 namespace {
@@ -13,6 +16,15 @@ bool initialize() {
   return true;
 }
 void put(u8 value) {
+#ifdef OSPLAY_HTIF_UART_TRACE
+  // Diagnostic only: a separate channel when investigating the physical UART.
+  // Acceptance tests must still receive the real UART bytes through SimUART.
+  while (tohost != 0) {}
+  tohost = (u64{1} << 56) | (u64{1} << 48) | value;
+  asm volatile("fence iorw, iorw" ::: "memory");
+  // FESVR's console write consumes tohost but does not return a response.
+  while (tohost != 0) {}
+#endif
   while (uart[0] & 0x80000000u) {}
   uart[0] = value;
 }
