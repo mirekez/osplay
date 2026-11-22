@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-chipyard = (Path(__file__).resolve().parent / "chipyard").resolve(strict=True)
+chipyard = Path(os.environ.get("CHIPYARD_DIR", Path(__file__).resolve().parent / "chipyard"))
 env = Path(os.environ.get("CHIPYARD_ENV", chipyard / ".conda-env"))
 with tempfile.TemporaryDirectory(prefix="rocket-bridge-test-") as tmp:
     lib = Path(tmp) / "bridge.so"
@@ -44,6 +44,13 @@ with tempfile.TemporaryDirectory(prefix="rocket-bridge-test-") as tmp:
                 last = beat[3]
                 beat = step(rx=1)
                 if last: break
+                # With no stalls the next handshake is 32 clocks later.
+                for _ in range(30):
+                    assert not beat[0], "RX exceeds 100 Mbit/s"
+                    beat = step()
+                assert not beat[0]
+                beat = step()
+                assert beat[0], "RX did not resume after 32-clock spacing"
             assert received == frame.ljust(60, b"\0")
             for i in range(0, len(received), 8):
                 chunk = received[i:i+8]
@@ -52,4 +59,4 @@ with tempfile.TemporaryDirectory(prefix="rocket-bridge-test-") as tmp:
             packet, _ = peer.recvfrom(2048)
             assert packet == b"\2" + len(received).to_bytes(2, "big") + received
         step(reset=1)
-print("PASS: Rocket DPI bridge framing, padding, partial beats, TX, RX stalls and reset")
+print("PASS: Rocket DPI bridge 100 Mbit/s pacing, framing, padding, partial beats, TX, RX stalls and reset")

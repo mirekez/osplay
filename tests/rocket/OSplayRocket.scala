@@ -35,7 +35,8 @@ class OSplayNIC(implicit p: Parameters) extends LazyModule {
     recv.module.io.recv.req <> rxq.io.deq
     rxdone.io.enq <> recv.module.io.recv.comp
     send.module.io.rlimit.inc := 1.U
-    send.module.io.rlimit.period := 0.U
+    // One 64-bit flit per 32 clocks at 50 MHz = 100 Mbit/s.
+    send.module.io.rlimit.period := 31.U
     send.module.io.rlimit.size := 1.U
     val txCommit = Wire(Decoupled(UInt(32.W)))
     val rxCommit = Wire(Decoupled(UInt(32.W)))
@@ -55,9 +56,7 @@ class OSplayNIC(implicit p: Parameters) extends LazyModule {
       0x10 -> Seq(RegField.r(1, txdone.io.deq)),
       0x14 -> Seq(RegField.r(16, rxdone.io.deq)),
       0x1c -> Seq(RegField.r(32, "h4d4e4931".U)))
-    val tx = Module(new EthernetPacketRateLimiter(50))
-    tx.io.in <> Queue(send.module.io.out, 2)
-    io.tx <> tx.io.out
+    io.tx <> send.module.io.out
     val credits = RegInit(511.U(10.W))
     recv.module.io.in.valid := io.rx.valid && credits =/= 0.U
     recv.module.io.in.bits := io.rx.bits

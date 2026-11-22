@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from benchmark_time import BenchmarkTimer
 
 ROOT = Path(__file__).resolve().parents[2]
 HOST = bytes.fromhex("020000000001")
@@ -71,7 +72,9 @@ def main():
     with tempfile.TemporaryDirectory(prefix="osplay-rocket-") as runtime, \
             socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as peer, \
             log_path.open("wb", buffering=0) as log, \
+            (out / (args.mode + ".timings.jsonl")).open("w") as timings, \
             (out / (args.mode + ".runtime.log")).open("wb", buffering=0) as diagnostics:
+        benchmark = BenchmarkTimer(timings)
         path = str(Path(runtime) / "net.sock")
         peer.bind(path)
         peer.setblocking(False)
@@ -99,6 +102,7 @@ def main():
                         if not chunk:
                             selector.unregister(proc.stdout)
                         log.write(chunk)
+                        benchmark.feed(chunk)
                         if args.show_output:
                             sys.stdout.buffer.write(chunk)
                             sys.stdout.buffer.flush()
@@ -194,6 +198,7 @@ def main():
                 if proc.poll() is not None:
                     remaining = proc.stdout.read()
                     log.write(remaining)
+                    benchmark.feed(remaining)
                     if args.show_output:
                         sys.stdout.buffer.write(remaining)
                         sys.stdout.buffer.flush()
@@ -226,6 +231,7 @@ def main():
                     if args.mode == "application":
                         if "\n" + os.environ["OSPLAY_ROCKET_APP_MARKER"] + "\n" not in text:
                             raise RuntimeError("application success marker is absent")
+                    benchmark.finish()
                     print(f"PASS: Rocket {args.mode}, ext4, U-mode BusyBox and clean HTIF exit; log: {log_path}")
                     return
             raise RuntimeError(f"timeout, last output:\n{text[-3000:]}")

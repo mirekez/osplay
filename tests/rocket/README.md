@@ -19,8 +19,11 @@ The launcher uses `VenusOSplayRocketConfig`: one RV64 Rocket, two DRAM channels,
 Venus, SIMD, RoCC, and the standard coherent IceNIC DMA engine. The complete
 hardware design runs in cpphdl native graph. UART, raw Ethernet frames and
 external DRAM are host boundary services, not device emulations replacing DMA.
-The NIC TX limiter permits five 64-bit flits per sixteen 50 MHz clocks: a
-1 Gbit/s frame-byte rate, excluding Ethernet PHY/FCS/inter-frame-gap overhead.
+The NIC TX limiter permits one 64-bit flit per 32 clocks at 50 MHz: a
+100 Mbit/s frame-byte rate, excluding Ethernet PHY/FCS/inter-frame-gap overhead.
+RX uses the same spacing and holds each offered beat stable under backpressure.
+The legacy `ethgig_tap`/`ethgig_proxy` names describe the socket protocol/tools,
+not a selectable gigabit link rate. Venus's RV64 PCIe bridge also uses 100 Mbit/s.
 
 `rocket64-kernel` builds `build/osplay-rocket-rv64.elf`, using separate
 `build/rocket64` objects. Userspace lives in `build/tests/busybox-rv64` and

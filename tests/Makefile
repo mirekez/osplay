@@ -29,6 +29,12 @@ TEST_DEPS := $(addsuffix .d,$(TEST_BINARIES))
 $(TEST_BINARIES): Makefile
 $(TEST_BINARIES): | $(KERNEL_CXX_READY)
 
+$(BUILD)/kernel/brk_test: kernel/brk_test.cpp $(ROOT)/kernel/syscall.cpp support/test.hpp
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -O1 -ffunction-sections -fdata-sections \
+	  -fsanitize=undefined -fno-sanitize-recover=all -MMD -MP -MF $@.d \
+	  $< $(LDFLAGS) -Wl,--gc-sections -o $@
+
 .PHONY: all test regression bridge-check fs-driver-check x86-driver-check clean
 
 LOOP_IMAGES := $(BUILD)/fixtures/loop-root.ext4 $(BUILD)/fixtures/loop.ext4 $(BUILD)/fixtures/loop.ext2

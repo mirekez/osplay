@@ -3221,6 +3221,29 @@ static_assert(sizeof(Statx) == 256);
   return 0;
 }
 
+[[nodiscard]] iword program_break(uword requested) {
+  if (requested == 0) {
+    return static_cast<iword>(process.brk);
+  }
+#ifdef OSPLAY_VENUS
+  // brk belongs to the low executable image, not the mmap arena. Never
+  // grow it through the reserved HTIF/rootfs gap between the two regions.
+  if (requested >= process.mutable_begin && requested <= user_stack_top - 1024*1024) {
+#elif defined(OSPLAY_EXTREME_USERSPACE)
+  if (requested >= process.mutable_begin && requested <= process.mmap_begin) {
+#else
+  if (requested >= user_begin && requested < process.mmap_cursor) {
+#endif
+    // Flat physical RAM can contain a previous executable/heap here. Linux
+    // libc assumes newly supplied sbrk storage is zero, just like fresh pages.
+    if (requested > process.brk) {
+      memset(reinterpret_cast<void*>(process.brk), 0, requested - process.brk);
+    }
+    process.brk = requested;
+  }
+  return static_cast<iword>(process.brk);
+}
+
 [[nodiscard]] i32 execve(TrapFrame& frame, uword path, uword argv, uword envp) {
   char canonical[256]{};
   Node node = path_node(path, canonical);
@@ -3886,9 +3909,14 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   Sysinfo64 value{};
   value.uptime = static_cast<iword>(tick_time().seconds);
 #ifdef OSPLAY_VENUS
-  value.totalram = abi::venus::heap_end - abi::venus::heap_begin;
-  value.freeram = process.mmap_cursor <= abi::venus::heap_end ?
-      abi::venus::heap_end - process.mmap_cursor : 0;
+#ifdef OSPLAY_PRELOADED_MEMORY
+  constexpr uword available_end = abi::venus::initialized_begin;
+#else
+  constexpr uword available_end = abi::venus::heap_end;
+#endif
+  value.totalram = available_end - abi::venus::heap_begin;
+  value.freeram = process.mmap_cursor <= available_end ?
+      available_end - process.mmap_cursor : 0;
 #else
   value.totalram = user_end - user_begin;
   value.freeram = process.mmap_cursor <= user_stack_top ?
@@ -4631,7 +4659,11 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
 #else
 #ifdef OSPLAY_VENUS
   const uword allocation_end = process.mmap_begin == abi::venus::heap_begin ?
+#if defined(OSPLAY_PRELOADED_MEMORY) && defined(OSPLAY_RV64)
+      abi::venus::initialized_begin : user_stack_top;
+#else
       abi::venus::heap_end : user_stack_top;
+#endif
 #else
   const uword allocation_end = user_stack_top;
 #endif
@@ -4736,6 +4768,36 @@ void deliver_pending_signal(TrapFrame& frame) {
 
 iword dispatch_syscall(TrapFrame& frame) {
 #ifdef OSPLAY_VENUS
+#if defined(OSPLAY_PRELOADED_MEMORY) && defined(OSPLAY_RV64)
+  if (frame.x[17] == abi::venus::initialized_memory) {
+    const auto* header = reinterpret_cast<const abi::venus::InitializedMemory*>(
+        abi::venus::initialized_begin);
+    if (!header->valid() || frame.x[10] != header->bytes ||
+        process.mmap_begin != abi::venus::heap_begin)
+      return error(Errno::invalid_argument);
+    // This region is excluded from anonymous allocation, so returning its
+    // existing contents cannot leak a reused anonymous allocation's bytes.
+    return static_cast<iword>(abi::venus::initialized_begin + header->payload_offset);
+  }
+#endif
+  if (frame.x[17] == abi::venus::cache_rows) {
+    const u64 address = frame.x[10], rows = frame.x[11], stride = frame.x[12];
+    // Bound both factors before multiplication, then validate the entire
+    // extent against the existing cache-maintenance ownership policy.
+    if (rows == 0 || rows >= (1ULL << 20) || stride >= (1ULL << 20) ||
+        (address & 63) != 0 || (stride & 63) != 0)
+      return error(Errno::invalid_argument);
+    if (!user_memory.cache_access(address,(rows-1)*stride+64,false))
+      return error(Errno::bad_address);
+    asm volatile("fence rw, rw" : : : "memory");
+    const u64 lines = stride == 0 ? 1 : rows;
+    for (u64 row=0; row<lines; ++row) {
+      const u64 line = address+row*stride;
+      asm volatile(".insn i 0x73, 0, zero, %0, -64" : : "r"(line) : "memory");
+    }
+    asm volatile("fence rw, rw" : : : "memory");
+    return 0;
+  }
   if (frame.x[17] == abi::venus::cache_range) {
     const u64 address = frame.x[10], bytes = frame.x[11], discard = frame.x[12];
     if (!user_memory.cache_access(address, bytes, discard))
@@ -4924,21 +4986,7 @@ iword dispatch_syscall(TrapFrame& frame) {
     case Syscall::getegid:
       return 0;
     case Syscall::brk:
-      if (a0 == 0) {
-        return static_cast<iword>(process.brk);
-      }
-#ifdef OSPLAY_VENUS
-      // brk belongs to the low executable image, not the mmap arena. Never
-      // grow it through the reserved HTIF/rootfs gap between the two regions.
-      if (a0 >= process.mutable_begin && a0 <= user_stack_top - 1024*1024) {
-#elif defined(OSPLAY_EXTREME_USERSPACE)
-      if (a0 >= process.mutable_begin && a0 <= process.mmap_begin) {
-#else
-      if (a0 >= user_begin && a0 < process.mmap_cursor) {
-#endif
-        process.brk = a0;
-      }
-      return static_cast<iword>(process.brk);
+      return program_break(a0);
     case Syscall::clone:
       return clone(frame, a0, a1, a4);
     case Syscall::execve:

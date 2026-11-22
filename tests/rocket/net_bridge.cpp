@@ -18,6 +18,7 @@ struct Bridge {
   std::vector<unsigned char> tx, rx;
   size_t cursor = 0;
   unsigned poll_count = 0;
+  unsigned rx_cooldown = 0;
   bool initialized = false;
   ~Bridge() { if (fd >= 0) close(fd); if (!path.empty()) unlink(path.c_str()); }
   [[noreturn]] void fail(const char* message) {
@@ -80,15 +81,19 @@ extern "C" void osplay_net_tick(svBit reset, svBit tx_fire,
   svBit rx_fire, svBit* valid, unsigned long long* data,
   unsigned char* keep, svBit* last) {
   *valid = *last = *keep = 0; *data = 0;
-  if (reset) { bridge.tx.clear(); bridge.rx.clear(); bridge.cursor = 0; return; }
+  if (reset) { bridge.tx.clear(); bridge.rx.clear(); bridge.cursor = 0; bridge.rx_cooldown = 0; return; }
   if (!bridge.initialized) bridge.init();
   if (tx_fire) bridge.transmit(tx_data, tx_keep, tx_last);
   if (rx_fire) {
+    // Do not withdraw a stalled valid beat. Start the 100-Mbit/s gap only
+    // after its handshake (64 bits / 32 clocks at 50 MHz).
+    bridge.rx_cooldown = 31;
     bridge.cursor += std::min(size_t(8), bridge.rx.size() - bridge.cursor);
     if (bridge.cursor == bridge.rx.size()) { bridge.rx.clear(); bridge.cursor = 0; }
   }
+  else if (bridge.rx_cooldown) --bridge.rx_cooldown;
   bridge.receive();
-  if (!bridge.rx.empty()) {
+  if (!bridge.rx.empty() && !bridge.rx_cooldown) {
     const auto n = std::min(size_t(8), bridge.rx.size() - bridge.cursor);
     *valid = 1; *last = bridge.cursor + n == bridge.rx.size();
     *keep = (1u << n) - 1;

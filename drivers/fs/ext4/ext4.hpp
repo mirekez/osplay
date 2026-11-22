@@ -478,7 +478,12 @@ class Volume {
         zero_bytes(output, count);
       } else {
         if (within == 0 && count == geometry_.block_size) {
-          u32 following = 1;
+          // Extents already describe a contiguous run. Do not reread the same
+          // tree leaf for every block while preparing a bulk file transfer.
+          const u32 first_run = std::min(mapping->contiguous,
+                                        remaining / geometry_.block_size);
+          count = first_run * geometry_.block_size;
+          u32 following = first_run;
           while (count <= remaining - geometry_.block_size &&
                  logical64 + following <= 0xffffffffu) {
             const auto next = map_block(
@@ -488,8 +493,10 @@ class Volume {
                     mapping->physical + following) {
               break;
             }
-            count += geometry_.block_size;
-            ++following;
+            const u32 run = std::min(next->contiguous,
+                (remaining - count) / geometry_.block_size);
+            count += run * geometry_.block_size;
+            following += run;
           }
         }
         const u64 byte_offset =
@@ -1110,6 +1117,7 @@ class Volume {
   struct BlockMapping {
     u64 physical{};
     bool zero{true};
+    u32 contiguous{1};
   };
 
   [[nodiscard]] Error resolve_parent(const char* path, Node& parent,
@@ -1786,7 +1794,8 @@ class Volume {
             return std::unexpected(Error::corrupt);
           }
           return Result<BlockMapping>(
-              BlockMapping{mapped, false});
+              BlockMapping{mapped, false, static_cast<u32>(std::min(
+                  end - logical, geometry_.block_count - mapped))});
         }
         return Result<BlockMapping>(BlockMapping{});
       }
@@ -1836,9 +1845,10 @@ class Volume {
   Device* device_{};
   Geometry geometry_{};
   bool mounted_{};
-  std::array<u8, 1024> superblock_{};
-  std::array<u8, 4096> block_{};
-  std::array<u8, 4096> directory_block_{};
+  // SectorReader's bulk path requires eight-byte-aligned destinations.
+  alignas(8) std::array<u8, 1024> superblock_{};
+  alignas(8) std::array<u8, 4096> block_{};
+  alignas(8) std::array<u8, 4096> directory_block_{};
 };
 
 }  // namespace osplay::drivers::fs::ext4

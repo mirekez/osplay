@@ -848,10 +848,23 @@ extern "C" void trap_handler(osplay::TrapFrame* frame) {
   }
   write_text("OSPLAY:TRAP cause=");
   write_u32(frame->mcause);
+  const auto write_address = [](uword value) {
+    write_text("0x");
+    for (u32 digit = sizeof(uword) * 2; digit != 0; --digit) {
+      const char text[] = {"0123456789abcdef"[(value >> ((digit - 1) * 4)) & 15], '\0'};
+      write_text(text);
+    }
+  };
   write_text(" pc=");
-  write_u32(frame->mepc);
+  write_address(frame->mepc);
   write_text(" value=");
-  write_u32(frame->mtval);
+  write_address(frame->mtval);
+  for (const auto reg : {4u, 8u, 18u, 14u, 15u}) {
+    write_text(" x");
+    write_u32(reg);
+    write_text("=");
+    write_address(frame->x[reg]);
+  }
   write_text("\n");
   shutdown(127);
 }
