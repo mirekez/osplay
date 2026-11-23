@@ -3,6 +3,9 @@
 Implemented in `tests/kernel/pseudo_filesystem_test.cpp`:
 
 - `/proc` and `/sys` mount boundaries do not match similarly prefixed paths.
+- `/proc/cpuinfo` resolves and lists as a regular file. It reports the CPU
+  topology exposed by OSplay, the build-target ISA on RISC-V, and `mmu: none`
+  for OSplay's flat address space.
 - BusyBox `netstat` inputs `/proc/net/tcp`, `tcp6`, `udp`, `udp6`, and `raw`
   resolve to regular files.
 - `/proc/net` enumerates its socket tables with the correct file types.

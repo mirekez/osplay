@@ -75,6 +75,26 @@ int main() {
   OSPLAY_CHECK(suite, !Filesystem::directory(Node::proc_net_tcp));
   OSPLAY_CHECK(suite,
               has_entry(Node::proc, "net", Type::directory));
+  OSPLAY_CHECK(suite, Filesystem::lookup("/proc/cpuinfo") == Node::proc_cpuinfo);
+  OSPLAY_CHECK(suite, has_entry(Node::proc, "cpuinfo", Type::regular));
+  OSPLAY_CHECK(suite, !Filesystem::directory(Node::proc_cpuinfo));
+  OSPLAY_CHECK(suite, Filesystem::size(Node::proc_cpuinfo) > 0);
+  const char* cpuinfo = Filesystem::contents(Node::proc_cpuinfo);
+  OSPLAY_CHECK(suite, contains(cpuinfo, "processor\t: 0\n"));
+  OSPLAY_CHECK(suite, contains(cpuinfo, "mmu\t\t: none\n"));
+#ifdef OSPLAY_TRIBE_MULTICORE
+  OSPLAY_CHECK(suite, contains(cpuinfo, "processor\t: 3\n"));
+#else
+  OSPLAY_CHECK(suite, !contains(cpuinfo, "processor\t: 1\n"));
+#endif
+#if defined(__riscv_xlen) && __riscv_xlen == 64
+  OSPLAY_CHECK(suite, contains(cpuinfo, "isa\t\t: rv64i"));
+#elif defined(__riscv_xlen)
+  OSPLAY_CHECK(suite, contains(cpuinfo, "isa\t\t: rv32i"));
+#endif
+#ifdef OSPLAY_ROCKET
+  OSPLAY_CHECK(suite, contains(cpuinfo, "uarch\t\t: rocket\n"));
+#endif
   OSPLAY_CHECK(suite,
               has_entry(Node::proc_net, "tcp", Type::regular));
   OSPLAY_CHECK(suite,

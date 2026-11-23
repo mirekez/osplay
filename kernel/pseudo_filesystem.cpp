@@ -42,6 +42,81 @@ using Entry = Filesystem::Entry;
   return result;
 }
 
+// Report the ISA the kernel was built for, not unprobed hardware extensions.
+constexpr char cpuinfo_fields[] =
+#if defined(__riscv_xlen)
+    "isa\t\t: "
+#if __riscv_xlen == 64
+    "rv64i"
+#else
+    "rv32i"
+#endif
+#ifdef __riscv_m
+    "m"
+#endif
+#ifdef __riscv_a
+    "a"
+#endif
+#ifdef __riscv_f
+    "f"
+#endif
+#ifdef __riscv_d
+    "d"
+#endif
+#ifdef __riscv_c
+    "c"
+#endif
+#ifdef __riscv_zicsr
+    "_zicsr"
+#endif
+#ifdef __riscv_zifencei
+    "_zifencei"
+#endif
+    "\n"
+#endif
+#if defined(OSPLAY_ROCKET)
+    "uarch\t\t: rocket\n"
+#elif defined(OSPLAY_TRIBE)
+    "uarch\t\t: tribe\n"
+#elif defined(OSPLAY_EXTREME)
+    "uarch\t\t: extreme\n"
+#endif
+    "mmu\t\t: none\n";
+
+consteval auto make_cpuinfo() {
+  // Match the topology exposed by /proc/stat and /sys/devices/system/cpu.
+#ifdef OSPLAY_TRIBE_MULTICORE
+  constexpr u32 count = 4;
+#else
+  constexpr u32 count = 1;
+#endif
+  struct Text {
+    char bytes[count * (sizeof("processor\t: 0\nhart\t\t: 0\n\n") +
+                        sizeof(cpuinfo_fields))]{};
+  } text;
+  char* out = text.bytes;
+  auto append = [&](const char* value) {
+    while (*value != '\0') {
+      *out++ = *value++;
+    }
+  };
+  for (u32 cpu = 0; cpu < count; ++cpu) {
+    append("processor\t: ");
+    *out++ = '0' + cpu;
+    *out++ = '\n';
+#if defined(__riscv_xlen)
+    append("hart\t\t: ");
+    *out++ = '0' + cpu;
+    *out++ = '\n';
+#endif
+    append(cpuinfo_fields);
+    *out++ = '\n';
+  }
+  return text;
+}
+
+constexpr auto cpuinfo = make_cpuinfo();
+
 struct PathNode {
   const char* path;
   Node node;
@@ -55,6 +130,7 @@ constexpr PathNode nodes[] = {
     {"/proc/net", Node::proc_net},
     {"/proc/net/dev", Node::proc_net_dev},
     {"/proc/stat", Node::proc_stat},
+    {"/proc/cpuinfo", Node::proc_cpuinfo},
     {"/proc/meminfo", Node::proc_meminfo},
     {"/proc/loadavg", Node::proc_loadavg},
     {"/proc/uptime", Node::proc_uptime},
@@ -93,6 +169,7 @@ constexpr Entry proc_entries[] = {
     {"2", Node::proc_pid2, Type::directory},
     {"net", Node::proc_net, Type::directory},
     {"stat", Node::proc_stat, Type::regular},
+    {"cpuinfo", Node::proc_cpuinfo, Type::regular},
     {"meminfo", Node::proc_meminfo, Type::regular},
     {"loadavg", Node::proc_loadavg, Type::regular},
     {"uptime", Node::proc_uptime, Type::regular},
@@ -296,6 +373,8 @@ const char* Filesystem::contents(Node node) {
   switch (node) {
     case Node::proc_stat:
       return cpu;
+    case Node::proc_cpuinfo:
+      return cpuinfo.bytes;
     case Node::proc_meminfo:
       return memory;
     case Node::proc_loadavg:

@@ -44,6 +44,7 @@ class Filesystem {
     sys_kernel_osrelease,
     sys_kernel_ostype,
     sys_kernel_hostname,
+    proc_cpuinfo,
   };
 
   enum class Type : u8 { none, directory, regular };
