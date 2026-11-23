@@ -257,6 +257,11 @@ Error truncate(Node &file, u64 size) {
   return error != Error::none ? error
                               : filesystem.owner(file)->truncate(file, size);
 }
+Error chmod(const Node &file, u16 mode) {
+  const Error error = filesystem.mutation(file);
+  return error != Error::none ? error
+                              : filesystem.owner(file)->chmod(file, mode);
+}
 Error remove(const char *path) {
   const auto file = lookup(path);
   if (!file)

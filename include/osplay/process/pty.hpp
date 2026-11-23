@@ -220,10 +220,7 @@ class PtyTable {
       // discipline. Linux PTYs start with OPOST | ONLCR, which turns a line
       // feed into CR-LF. Without that conversion a terminal moves down but
       // stays in the current column, producing increasingly indented output.
-      constexpr u32 opost = 0x00000001;
-      constexpr u32 onlcr = 0x00000004;
-      const bool translate_newline =
-          (pty->termios.output_flags & (opost | onlcr)) == (opost | onlcr);
+      const bool translate_newline = translates_newline(pty->termios);
       u32 consumed = 0;
       while (consumed < count) {
         const u8 character = input[consumed];
@@ -488,7 +485,8 @@ class PtyTable {
     return input_ready || peer_closed;
   }
 
-  [[nodiscard]] constexpr bool writable(PtyHandle handle, PtyEnd end) const {
+  [[nodiscard]] constexpr bool writable(PtyHandle handle, PtyEnd end,
+                                        u8 first_byte = 0) const {
     const auto* pty = find(handle);
     if (pty == nullptr || references(*pty, end) == 0) {
       return false;
@@ -501,7 +499,15 @@ class PtyTable {
       return !peer_closed && pty->record_count < BufferCapacity &&
              ring.free_space() > pty->line_size;
     }
-    return !peer_closed && !ring.full();
+    const u32 needed = end == PtyEnd::slave && first_byte == '\n' &&
+        translates_newline(pty->termios) ? 2 : 1;
+    return !peer_closed && ring.free_space() >= needed;
+  }
+
+  [[nodiscard]] constexpr bool hung_up(PtyHandle handle, PtyEnd end) const {
+    const auto* pty = find(handle);
+    return pty != nullptr &&
+           (end == PtyEnd::master ? pty->slaves == 0 : pty->masters == 0);
   }
 
   [[nodiscard]] constexpr u32 used() const {
@@ -578,6 +584,12 @@ class PtyTable {
     return (pty.termios.local_flags & 0x2) != 0;  // ICANON
   }
 
+  [[nodiscard]] static constexpr bool translates_newline(const TermiosState& termios) {
+    constexpr u32 opost = 0x00000001;
+    constexpr u32 onlcr = 0x00000004;
+    return (termios.output_flags & (opost | onlcr)) == (opost | onlcr);
+  }
+
   static constexpr void commit_line(Pty& pty) {
     static_cast<void>(pty.master_to_slave.write(pty.line, pty.line_size));
     pty.records[(pty.record_head + pty.record_count) % BufferCapacity] =
@@ -592,7 +604,7 @@ class PtyTable {
         !(canonical(pty) && character == '\n' && (flags & 0x40) != 0)) {
       return;
     }
-    if (character == '\n' && (pty.termios.output_flags & 0x5) == 0x5) {
+    if (character == '\n' && translates_newline(pty.termios)) {
       const u8 newline[]{'\r', '\n'};
       if (pty.slave_to_master.free_space() >= sizeof(newline)) {
         static_cast<void>(pty.slave_to_master.write(newline, sizeof(newline)));

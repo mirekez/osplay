@@ -134,10 +134,11 @@ class PipeTable {
            (!pipe->data.empty() || pipe->writers == 0);
   }
 
-  [[nodiscard]] constexpr bool writable(PipeHandle handle) const {
+  [[nodiscard]] constexpr bool writable(PipeHandle handle,
+                                        u32 count = 1) const {
     const auto* pipe = find(handle);
     return pipe != nullptr && pipe->writers != 0 && pipe->readers != 0 &&
-           !pipe->data.full();
+           pipe->data.free_space() >= (count <= AtomicCapacity ? count : 1);
   }
 
   [[nodiscard]] constexpr bool hung_up(PipeHandle handle,

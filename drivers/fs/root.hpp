@@ -31,6 +31,7 @@ using DirectoryVisitor = bool (*)(void* context, const Entry& entry);
                                 u32 count);
 [[nodiscard]] Error create(const char* path, const u8* input, u32 count);
 [[nodiscard]] Error mkdir(const char* path, u16 mode);
+[[nodiscard]] Error chmod(const Node& file, u16 mode);
 [[nodiscard]] Error truncate(Node& file, u64 size);
 [[nodiscard]] Error remove(const char* path);
 [[nodiscard]] Error move(const char* source, const char* destination);

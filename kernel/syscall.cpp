@@ -172,11 +172,20 @@ struct ParkedBackground {
 
 ParkedBackground background{};
 
+enum class InteractiveWaitKind : u8 { pty_read, pty_write, pipe_write };
+
+struct InteractiveWait {
+  InteractiveWaitKind kind{InteractiveWaitKind::pty_read};
+  process_model::PtyHandle pty{};
+  process_model::PtyEnd pty_end{process_model::PtyEnd::slave};
+  process_model::PipeHandle pipe{};
+  u32 pipe_write_size{};
+  u8 pty_first_byte{};
+};
+
 // The flat address-space adapter normally runs a fork child to completion.
-// An interactive PTY shell is different: after writing its prompt it must
-// block on the slave while its immediate Dropbear parent drains the master,
-// forwards the prompt, and receives more input. Its exact-sized snapshot uses
-// the same shared arena as every other suspended address space.
+// An SSH child may block on input or output while Dropbear services its PTY
+// or pipe. Its snapshot uses the shared suspended address-space arena.
 struct ParkedInteractiveChild {
   TrapFrame frame{};
   uword brk{};
@@ -202,8 +211,7 @@ struct ParkedInteractiveChild {
   char current_directory[256]{};
   char executable_path[256]{};
   u64 wait_deadline{~u64{0}};
-  process_model::PtyHandle wait_pty{};
-  process_model::PtyEnd wait_end{process_model::PtyEnd::slave};
+  InteractiveWait wait{};
   process_model::SnapshotAllocation snapshot{};
   bool used{};
 };
@@ -608,39 +616,38 @@ Descriptor interactive_parent_standard_redirects[3]{};
 process_model::PipeTable<8> pipes{};
 process_model::PtyTable<4> ptys{};
 
-[[nodiscard]] bool owns_pty_master(
+[[nodiscard]] bool owns_stream_peer(
     const Descriptor* saved, const Descriptor* saved_standard,
-    process_model::PtyHandle handle) {
+    const InteractiveWait& wait) {
+  const auto owns_peer = [&](const Descriptor& descriptor) {
+    if (wait.kind == InteractiveWaitKind::pipe_write) {
+      return descriptor.node == Node::pipe && descriptor.pipe == wait.pipe &&
+             descriptor.pipe_end == process_model::PipeEnd::read;
+    }
+    return descriptor.node == Node::pty && descriptor.pty == wait.pty &&
+           descriptor.pty_end == process_model::PtyEnd::master;
+  };
   for (u32 i = 0; i < 13; ++i) {
-    if (saved[i].node == Node::pty && saved[i].pty == handle &&
-        saved[i].pty_end == process_model::PtyEnd::master) {
+    if (owns_peer(saved[i])) {
       return true;
     }
   }
   for (u32 i = 0; i < 3; ++i) {
-    if (saved_standard[i].node == Node::pty &&
-        saved_standard[i].pty == handle &&
-        saved_standard[i].pty_end == process_model::PtyEnd::master) {
+    if (owns_peer(saved_standard[i])) {
       return true;
     }
   }
   return false;
 }
 
-[[nodiscard]] bool parent_owns_pty_master(
-    process_model::PtyHandle handle) {
-  return owns_pty_master(parent_descriptors,
-                         parent_standard_redirects, handle);
-}
-
-[[nodiscard]] bool nearest_ancestor_owns_pty_master(
-    process_model::PtyHandle handle) {
+[[nodiscard]] bool nearest_ancestor_owns_stream_peer(
+    const InteractiveWait& wait) {
   if (nested_ancestor_depth == 0) {
     return false;
   }
   const u32 level = nested_ancestor_depth - 1;
-  return owns_pty_master(nested_ancestor_descriptors[level],
-                         nested_ancestor_standard_redirects[level], handle);
+  return owns_stream_peer(nested_ancestor_descriptors[level],
+                          nested_ancestor_standard_redirects[level], wait);
 }
 
 [[nodiscard]] u32 queue_process_group_signal(u32 process_group, u8 signal) {
@@ -850,9 +857,7 @@ void move_saved_descriptors(Descriptor* saved, Descriptor* saved_standard) {
   return true;
 }
 
-void capture_interactive_child(TrapFrame& frame,
-                               process_model::PtyHandle wait_pty,
-                               process_model::PtyEnd wait_end) {
+void capture_interactive_child(TrapFrame& frame, const InteractiveWait& wait) {
   interactive_child.frame = frame;
   interactive_child.brk = process.brk;
   interactive_child.mmap_begin = process.mmap_begin;
@@ -876,27 +881,27 @@ void capture_interactive_child(TrapFrame& frame,
          sizeof(interactive_child.current_directory));
   memcpy(interactive_child.executable_path, process.executable_path,
          sizeof(interactive_child.executable_path));
-  interactive_child.wait_pty = wait_pty;
-  interactive_child.wait_end = wait_end;
+  interactive_child.wait = wait;
   interactive_child.used = true;
 }
 
 [[nodiscard]] bool park_interactive_child(
-    TrapFrame& frame, process_model::PtyHandle wait_pty,
-    process_model::PtyEnd wait_end, u64 deadline) {
+    TrapFrame& frame, const InteractiveWait& wait, u64 deadline = ~u64{0}) {
   if (!process_model::pty_child_can_park(
           interactive_child.used, parent.active,
-          wait_end == process_model::PtyEnd::slave)) {
+          wait.kind == InteractiveWaitKind::pipe_write ||
+              wait.pty_end == process_model::PtyEnd::slave)) {
     return false;
   }
-  const bool direct_parent_services_pty = parent_owns_pty_master(wait_pty);
+  const bool direct_parent_services_stream = owns_stream_peer(
+      parent_descriptors, parent_standard_redirects, wait);
   const bool relay_through_ancestor =
-      !direct_parent_services_pty && !interactive_parent.active &&
-      nearest_ancestor_owns_pty_master(wait_pty);
-  if (!direct_parent_services_pty && !relay_through_ancestor) {
+      !direct_parent_services_stream && !interactive_parent.active &&
+      nearest_ancestor_owns_stream_peer(wait);
+  if (!direct_parent_services_stream && !relay_through_ancestor) {
     return false;
   }
-  capture_interactive_child(frame, wait_pty, wait_end);
+  capture_interactive_child(frame, wait);
   interactive_child.wait_deadline = deadline;
   if (!save_interactive_child_memory()) {
 #if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
@@ -915,8 +920,8 @@ void capture_interactive_child(TrapFrame& frame,
                           interactive_child_standard_redirects);
   if (relay_through_ancestor) {
     // Keep the waiting shell as the blocked program's immediate parent, but
-    // temporarily restore the Dropbear ancestor that owns the PTY master.
-    // On input, resume_interactive_child_if_ready() stacks Dropbear again,
+    // temporarily restore the Dropbear ancestor that owns the stream peer.
+    // On readiness, resume_interactive_child_if_ready() stacks Dropbear again,
     // reinstates this fork frame, and only then restores the blocked program.
     interactive_parent = parent;
     for (u32 i = 0; i < 13; ++i) {
@@ -962,18 +967,38 @@ void capture_interactive_child(TrapFrame& frame,
   write_text("\n");
 #endif
   // Return to the immediate Dropbear parent but keep the older suspended
-  // listener/shell ancestry stacked. The child will replay this read syscall
-  // once the parent has delivered bytes to the PTY master.
+  // listener/shell ancestry stacked. The child will replay the syscall when
+  // Dropbear has serviced the stream.
   const bool first_park =
       parent.frame.x[17] == static_cast<u32>(Syscall::clone);
   resume_parent(frame, 0, false, first_park);
   return true;
 }
 
+[[nodiscard]] bool park_interactive_child(
+    TrapFrame& frame, process_model::PtyHandle wait_pty,
+    process_model::PtyEnd wait_end, u64 deadline) {
+  return park_interactive_child(frame, {.pty = wait_pty, .pty_end = wait_end},
+                                deadline);
+}
+
+[[nodiscard]] bool interactive_wait_ready(const InteractiveWait& wait) {
+  switch (wait.kind) {
+    case InteractiveWaitKind::pty_read:
+      return ptys.readable(wait.pty, wait.pty_end);
+    case InteractiveWaitKind::pty_write:
+      return ptys.writable(wait.pty, wait.pty_end, wait.pty_first_byte) ||
+             ptys.hung_up(wait.pty, wait.pty_end);
+    case InteractiveWaitKind::pipe_write:
+      return pipes.writable(wait.pipe, wait.pipe_write_size) ||
+             pipes.hung_up(wait.pipe, process_model::PipeEnd::write);
+  }
+  return false;
+}
+
 [[nodiscard]] bool resume_interactive_child_if_ready(TrapFrame& frame) {
-  const bool slave_readable =
-      interactive_child.used &&
-      ptys.readable(interactive_child.wait_pty, interactive_child.wait_end);
+  const bool stream_ready =
+      interactive_child.used && interactive_wait_ready(interactive_child.wait);
   const bool wait_interrupted =
       interactive_child.used &&
       interactive_child.signals.has_deliverable();
@@ -983,7 +1008,7 @@ void capture_interactive_child(TrapFrame& frame,
   const bool relayed = interactive_parent.active;
   if (!process_model::pty_child_can_resume(
           interactive_child.used, process.pid, interactive_child.parent_pid,
-          parent.active, slave_readable || wait_expired, wait_interrupted,
+          parent.active, stream_ready || wait_expired, wait_interrupted,
           relayed ? interactive_relay_service_pid
                   : process_model::invalid_pid) ||
       (relayed && nested_ancestor_depth == nested_ancestor_capacity) ||
@@ -1067,7 +1092,7 @@ void capture_interactive_child(TrapFrame& frame,
   move_saved_descriptors(interactive_child_descriptors,
                          interactive_child_standard_redirects);
   frame = interactive_child.frame;
-  if (wait_interrupted || (wait_expired && !slave_readable)) {
+  if (wait_interrupted || (wait_expired && !stream_ready)) {
     // Complete an expired poll instead of replaying its relative timeout.
     // ppoll revents were cleared before parking; select sets still contain
     // the request and must be cleared in the restored child address space.
@@ -1650,6 +1675,10 @@ void discard_parked_session() {
   const Node node = path_node_at(directory_descriptor, address);
   if (node == Node::none) {
     return error(Errno::no_entry);
+  }
+  if (node == Node::filesystem) {
+    return filesystem_error(drivers::fs::root::chmod(
+        node.file, static_cast<u16>(mode)));
   }
   if (node != Node::pty || node.pty_number == 0xff) {
     return error(Errno::read_only_filesystem);
@@ -3958,7 +3987,7 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return 0;
 }
 
-[[nodiscard]] i32 write(u32 descriptor, uword address, u32 size) {
+[[nodiscard]] i32 write_descriptor(u32 descriptor, uword address, u32 size) {
   if (!user_memory.contains(address, size)) {
     return error(Errno::bad_address);
   }
@@ -4028,12 +4057,6 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
       return error(Errno::broken_pipe);
     }
     if (result.status == process_model::PipeStatus::would_block) {
-      constexpr u32 nonblock = 0x800;
-      if ((slot.flags & nonblock) != 0) {
-        return error(Errno::try_again);
-      }
-      // The syscall is retried by the process-scheduler phase once a reader
-      // wakes this writer. Do not busy-loop a full pipe in the current phase.
       return error(Errno::try_again);
     }
     return error(Errno::bad_file_descriptor);
@@ -4116,7 +4139,38 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   return static_cast<i32>((*result));
 }
 
-[[nodiscard]] i32 writev(u32 descriptor, uword address, u32 count) {
+[[nodiscard]] bool park_stream_writer(TrapFrame& frame, u32 descriptor,
+                                      uword address, u32 size) {
+  const Descriptor* slot = descriptor_slot(descriptor);
+  constexpr u32 nonblock = 0x800;
+  if (slot == nullptr || (slot->flags & nonblock) != 0) {
+    return false;
+  }
+  if (slot->node == Node::pipe) {
+    return park_interactive_child(frame,
+        {.kind = InteractiveWaitKind::pipe_write, .pipe = slot->pipe,
+         .pipe_write_size = size});
+  }
+  if (slot->node == Node::pty && slot->pty_end == process_model::PtyEnd::slave) {
+    return park_interactive_child(frame,
+        {.kind = InteractiveWaitKind::pty_write, .pty = slot->pty,
+         .pty_first_byte = *reinterpret_cast<const u8*>(address)});
+  }
+  return false;
+}
+
+[[nodiscard]] i32 write(TrapFrame& frame, u32 descriptor, uword address,
+                        u32 size) {
+  const i32 result = write_descriptor(descriptor, address, size);
+  if (result == error(Errno::try_again) &&
+      park_stream_writer(frame, descriptor, address, size)) {
+    return static_cast<i32>(frame.x[10]);
+  }
+  return result;
+}
+
+[[nodiscard]] i32 writev(TrapFrame& frame, u32 descriptor, uword address,
+                         u32 count) {
   if (count > 1024 ||
       !user_memory.contains(address, count * sizeof(Iovec32)) ||
       !user_memory.aligned(address, alignof(Iovec32))) {
@@ -4127,16 +4181,29 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
   memcpy(snapshot.data(), reinterpret_cast<const void*>(address),
          count * sizeof(Iovec32));
 #ifdef OSPLAY_RV64
-  return io::scatter_write64(std::span<const Iovec32>{snapshot.data(), count},
+  const i32 result = io::scatter_write64(std::span<const Iovec32>{snapshot.data(), count},
 #else
-  return io::scatter_write(std::span<const Iovec32>{snapshot.data(), count},
+  const i32 result = io::scatter_write(std::span<const Iovec32>{snapshot.data(), count},
 #endif
       [descriptor](uword base, uword size) {
         if (!user_memory.contains(base, size)) return error(Errno::bad_address);
         if (size > 0x7fffffffU) return error(Errno::invalid_argument);
-        return write(descriptor, base, static_cast<u32>(size));
+        return write_descriptor(descriptor, base, static_cast<u32>(size));
       },
       error(Errno::invalid_argument));
+  // A blocked first vector can be replayed. If any bytes were written, the
+  // scatter writer returns the progress so replay cannot duplicate output.
+  if (result == error(Errno::try_again)) {
+    for (u32 i = 0; i < count; ++i) {
+      if (snapshot[i].size == 0) continue;
+      if (park_stream_writer(frame, descriptor, snapshot[i].base,
+                             static_cast<u32>(snapshot[i].size))) {
+        return static_cast<i32>(frame.x[10]);
+      }
+      break;
+    }
+  }
+  return result;
 }
 
 [[nodiscard]] i32 read(TrapFrame& frame, u32 descriptor, uword address,
@@ -4874,9 +4941,9 @@ iword dispatch_syscall(TrapFrame& frame) {
     case Syscall::ftruncate:
       return ftruncate(a0, a1);
     case Syscall::write:
-      return write(a0, a1, a2);
+      return write(frame, a0, a1, a2);
     case Syscall::writev:
-      return writev(a0, a1, a2);
+      return writev(frame, a0, a1, a2);
     case Syscall::pselect6:
 #if defined(OSPLAY_INTERACTIVE) || defined(OSPLAY_EXTREME_USERSPACE)
       return pselect6(frame, a0, a1, a2, a3, a4, sizeof(uword) == 8);

@@ -38,6 +38,19 @@ int main() {
   OSPLAY_CHECK(suite, read_input().size == 2 && output[0] == 's' && output[1] == '\n');
   OSPLAY_CHECK(suite, !ptys.readable(slave, PtyEnd::slave));
 
+  // One free byte can hold ordinary output, but not an expanded newline.
+  const u8 fill[15]{};
+  const u8 newline = '\n';
+  OSPLAY_CHECK(suite, ptys.write(slave, PtyEnd::slave, fill, sizeof(fill)).size == 15);
+  OSPLAY_CHECK(suite, ptys.writable(slave, PtyEnd::slave));
+  OSPLAY_CHECK(suite, !ptys.writable(slave, PtyEnd::slave, newline));
+  OSPLAY_CHECK(suite, ptys.write(slave, PtyEnd::slave, &newline, 1).status ==
+                         PtyStatus::would_block);
+  OSPLAY_CHECK(suite, ptys.read(master, PtyEnd::master, output, 1).size == 1);
+  OSPLAY_CHECK(suite, ptys.writable(slave, PtyEnd::slave, newline));
+  OSPLAY_CHECK(suite, ptys.write(slave, PtyEnd::slave, &newline, 1).size == 1);
+  OSPLAY_CHECK(suite, read_echo().size == 16 && output[14] == '\r' && output[15] == '\n');
+
   // Canonical reads stop at a record boundary even when commands arrive together.
   OSPLAY_CHECK(suite, type("ls\rls\r").size == 6);
   OSPLAY_CHECK(suite, read_input().size == 3 && output[2] == '\n');
@@ -111,7 +124,9 @@ int main() {
               type("\003").generated_signals == SignalState::bit(signal_interrupt));
   OSPLAY_CHECK(suite, read_input().status == PtyStatus::would_block);
   OSPLAY_CHECK(suite, type("z").size == 1);
+  OSPLAY_CHECK(suite, !ptys.hung_up(slave, PtyEnd::slave));
   OSPLAY_CHECK(suite, ptys.release(master, PtyEnd::master) == PtyStatus::success);
+  OSPLAY_CHECK(suite, ptys.hung_up(slave, PtyEnd::slave));
   OSPLAY_CHECK(suite, read_input().size == 1 && output[0] == 'z');
   OSPLAY_CHECK(suite, read_input().status == PtyStatus::end_of_file);
   return suite.finish();

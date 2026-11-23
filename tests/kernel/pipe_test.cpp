@@ -43,16 +43,20 @@ int main() {
   // Atomic-size writes do not partially enter a nearly full pipe.
   OSPLAY_CHECK(suite, pipes.write(handle, first, 6).size == 6);
   const osplay::u8 atomic[] = {10, 11, 12};
+  OSPLAY_CHECK(suite, pipes.writable(handle, 2));
+  OSPLAY_CHECK(suite, !pipes.writable(handle, sizeof(atomic)));
   written = pipes.write(handle, atomic, sizeof(atomic));
   OSPLAY_CHECK(suite, written.status == PipeStatus::would_block);
   OSPLAY_CHECK(suite, written.size == 0);
   // Larger-than-atomic writes are allowed to make bounded partial progress.
   const osplay::u8 large[] = {20, 21, 22, 23, 24};
+  OSPLAY_CHECK(suite, pipes.writable(handle, sizeof(large)));
   written = pipes.write(handle, large, sizeof(large));
   OSPLAY_CHECK(suite, written.status == PipeStatus::success);
   OSPLAY_CHECK(suite, written.size == 2);
   OSPLAY_CHECK(suite, !pipes.writable(handle));
   OSPLAY_CHECK(suite, pipes.read(handle, output, 8).size == 8);
+  OSPLAY_CHECK(suite, pipes.writable(handle, sizeof(atomic)));
 
   // Dup/fork-style endpoint references delay EOF and broken-pipe transitions.
   OSPLAY_CHECK(suite, pipes.retain(handle, PipeEnd::write) ==

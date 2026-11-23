@@ -83,8 +83,14 @@ void check_create_write_move_concatenate_remove(
   const u8 first[1500] = {1, 2, 3};
   const u8 second[900] = {4, 5, 6};
   OSPLAY_CHECK(suite,
-              mounted->create("/alpha.bin", first, sizeof(first)) ==
+              mounted->create("/alpha.bin", first, sizeof(first) - 1) ==
                   Error::none);
+  auto opened = mounted->lookup_path("/alpha.bin");
+  OSPLAY_CHECK(suite, opened);
+  OSPLAY_CHECK(suite, mounted->chmod(*opened, 0755) == Error::none);
+  const auto extended = mounted->write(
+      *opened, sizeof(first) - 1, first + sizeof(first) - 1, 1);
+  OSPLAY_CHECK(suite, extended && *extended == 1);
   OSPLAY_CHECK(suite,
               mounted->create("/beta.bin", second, sizeof(second)) ==
                   Error::none);
@@ -98,6 +104,8 @@ void check_create_write_move_concatenate_remove(
   auto remounted = Volume<ext4::test::Device>::mount(image.device);
   OSPLAY_CHECK(suite, remounted);
   OSPLAY_CHECK(suite, remounted->consistent());
+  const auto moved = remounted->lookup_path("/moved.bin");
+  OSPLAY_CHECK(suite, moved && moved->mode == 0100755);
   const auto size = remounted->file_size("/moved.bin");
   OSPLAY_CHECK(suite, size);
   OSPLAY_CHECK(suite, (*size) == sizeof(first) + sizeof(second));

@@ -858,6 +858,27 @@ class Volume {
 
   template <typename D = Device>
     requires WritableDevice<D>
+  [[nodiscard]] Error chmod(const Node& node, u16 mode) {
+    if (!writable_format()) {
+      return Error::read_only;
+    }
+    if (node.type != Type::regular && node.type != Type::directory) {
+      return Error::unsupported;
+    }
+    Node updated = node;
+    updated.mode = static_cast<u16>((node.mode & 0xf000) | (mode & 07777));
+    if (updated.mode == node.mode) {
+      return Error::none;
+    }
+    const Error error = persist_inode(updated, true);
+    if (error != Error::none) {
+      return error;
+    }
+    return device_->flush() ? Error::none : Error::io;
+  }
+
+  template <typename D = Device>
+    requires WritableDevice<D>
   [[nodiscard]] Error sync() {
     return device_->flush() ? Error::none : Error::io;
   }
@@ -888,7 +909,7 @@ class Volume {
     }
     Node file{};
     initialize_extent_inode(file, (*allocated), 0x81a4, Type::regular);
-    error = persist_inode(file);
+    error = persist_inode(file, true);
     if (error == Error::none && size != 0) {
       const auto stored = write(file, 0, input, size);
       error = stored ? Error::none : stored.error();
@@ -957,7 +978,7 @@ class Volume {
                                          (*allocated_block));
     }
     if (error == Error::none) {
-      error = persist_inode(directory);
+      error = persist_inode(directory, true);
     }
     if (error == Error::none) {
       error = insert_directory_entry(parent, name, directory);
@@ -1203,7 +1224,7 @@ class Volume {
 
   template <typename D = Device>
     requires WritableDevice<D>
-  [[nodiscard]] Error persist_inode(const Node& node) {
+  [[nodiscard]] Error persist_inode(const Node& node, bool set_mode = false) {
     if (node.inode_offset == 0 || geometry_.inode_size > block_.size()) {
       return Error::corrupt;
     }
@@ -1222,7 +1243,9 @@ class Volume {
       block_[offset + 2] = static_cast<u8>(value >> 16);
       block_[offset + 3] = static_cast<u8>(value >> 24);
     };
-    put16(0x00, node.mode);
+    if (set_mode) {
+      put16(0x00, node.mode);
+    }
     put32(0x04, static_cast<u32>(node.size));
     put16(0x1a, node.links);
     put32(0x1c, static_cast<u32>(node.allocated_sectors));
