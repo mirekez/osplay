@@ -5,7 +5,9 @@ output="$root/build/tests/network"
 mkdir -p "$output"
 flags=()
 if command -v pkg-config >/dev/null && pkg-config --exists slirp; then
+  lib=$(pkg-config --variable=libdir slirp)
   read -r -a flags <<< "$(pkg-config --cflags --libs slirp)"
+  flags=("-L$lib" "-Wl,-rpath,$lib" "-Wl,-rpath-link,$lib" "${flags[@]}")
 else
   deps=${SLIRP_ROOT:-"$output/slirp"}
   if [[ ! -f "$deps/usr/include/slirp/libslirp.h" ]]; then

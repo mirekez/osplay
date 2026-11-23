@@ -1,6 +1,10 @@
 // Rootless counterpart to ethgig_tap: libslirp supplies TCP/IP, while raw
 // Ethernet still crosses the same UNIX datagram link to the simulated NIC.
+#if __has_include(<libslirp.h>)
+#include <libslirp.h>
+#else
 #include <slirp/libslirp.h>
+#endif
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -35,7 +39,7 @@ struct Proxy {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now()-p.start).count()/p.clock_scale;
   }
-  static slirp_ssize_t send_packet(const void* data, size_t size, void* opaque) {
+  static ssize_t send_packet(const void* data, size_t size, void* opaque) {
     auto& p = *static_cast<Proxy*>(opaque);
     if (size < 14 || size > 1514 || !p.peer_length) return size;
     if (p.packets.size() >= 256) { ++p.dropped; return size; }
@@ -98,12 +102,16 @@ int main(int argc, char** argv) {
     perror("proxy socket (refusing to replace existing endpoint)"); return 1;
   }
   SlirpConfig config{};
-  config.version = 4; config.restricted = 1; config.in_enabled = true;
+  config.version = SLIRP_CONFIG_VERSION_MAX >= 4 ? 4 : SLIRP_CONFIG_VERSION_MAX;
+  config.restricted = 1; config.in_enabled = true;
   inet_pton(AF_INET, "192.168.76.0", &config.vnetwork);
   inet_pton(AF_INET, "255.255.255.0", &config.vnetmask);
   inet_pton(AF_INET, "192.168.76.1", &config.vhost);
   inet_pton(AF_INET, "192.168.76.2", &config.vdhcp_start);
-  config.disable_dns = config.disable_dhcp = config.disable_host_loopback = true;
+  config.disable_dns = config.disable_host_loopback = true;
+#if SLIRP_CONFIG_VERSION_MAX >= 4
+  config.disable_dhcp = true;
+#endif
   config.if_mtu = config.if_mru = 1500;
   SlirpCb callbacks{};
   callbacks.send_packet = Proxy::send_packet; callbacks.guest_error = Proxy::error;
