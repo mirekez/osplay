@@ -1,0 +1,210 @@
+diff --git a/Makefile.in b/Makefile.in
+index 8f178ee..e84626a 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -52,5 +52,5 @@ _SVROBJS=svr-kex.o svr-auth.o sshpty.o \
+ 		svr-authpasswd.o svr-authpubkey.o svr-authpubkeyoptions.o svr-session.o svr-service.o \
+ 		svr-chansession.o svr-runopts.o svr-agentfwd.o svr-main.o svr-x11fwd.o\
+-		svr-forward.o svr-tcpfwd.o svr-streamfwd.o svr-authpam.o
++		svr-forward.o svr-tcpfwd.o svr-streamfwd.o svr-authpam.o osplay-sftp.o
+ SVROBJS = $(patsubst %,$(OBJ_DIR)/%,$(_SVROBJS))
+
+diff --git a/src/channel.h b/src/channel.h
+index fdb6777..48854c9 100644
+--- a/src/channel.h
++++ b/src/channel.h
+@@ -51,4 +51,7 @@ struct Channel {
+ 	unsigned int recvmaxpacket, transmaxpacket;
+ 	void* typedata; /* a pointer to type specific data */
++#if DROPBEAR_OSPLAY_SFTP && DROPBEAR_SERVER
++	struct osplay_sftp *sftp;
++#endif
+ 	int writefd; /* read from wire, written to insecure side */
+ 	int readfd; /* read from insecure side, written to wire */
+diff --git a/src/common-channel.c b/src/common-channel.c
+index f7a7e31..8939b76 100644
+--- a/src/common-channel.c
++++ b/src/common-channel.c
+@@ -36,4 +36,7 @@
+ #include "runopts.h"
+ #include "netio.h"
++#if DROPBEAR_OSPLAY_SFTP && DROPBEAR_SERVER
++#include "osplay-sftp.h"
++#endif
+
+ static void send_msg_channel_open_failure(unsigned int remotechan, int reason,
+@@ -151,4 +154,7 @@ static struct Channel* newchannel(unsigned int remotechan,
+
+ 	newchan->typedata = NULL;
++#if DROPBEAR_OSPLAY_SFTP && DROPBEAR_SERVER
++	newchan->sftp = NULL;
++#endif
+ 	newchan->writefd = FD_UNINIT;
+ 	newchan->readfd = FD_UNINIT;
+@@ -277,4 +283,24 @@ static void check_close(struct Channel *channel) {
+ 	int close_allowed = 0;
+
++#if DROPBEAR_OSPLAY_SFTP && DROPBEAR_SERVER
++	if (channel->sftp) {
++		const unsigned char *output;
++		const int drained = !cbuf_getused(channel->writebuf)
++			&& !osplay_sftp_output(channel->sftp, &output);
++		const int failed = osplay_sftp_failed(channel->sftp, channel->recv_eof && drained);
++		if (!channel->sent_close &&
++			(channel->recv_close || failed || (channel->recv_eof && drained))) {
++			start_send_channel_request(channel, "exit-status");
++			buf_putbyte(ses.writepayload, 0);
++			buf_putint(ses.writepayload, failed ? 1 : 0);
++			encrypt_packet();
++			send_msg_channel_eof(channel);
++			send_msg_channel_close(channel);
++		}
++		if (channel->recv_close) remove_channel(channel);
++		return;
++	}
++#endif
++
+ 	TRACE2(("check_close: writefd %d, readfd %d, errfd %d, sent_close %d, recv_close %d",
+ 				channel->writefd, channel->readfd,
+@@ -538,4 +564,44 @@ static int writechannel(struct Channel* channel, int fd, circbuffer *cbuf,
+
+
++#if DROPBEAR_OSPLAY_SFTP && DROPBEAR_SERVER
++/* Consume input from the SSH receive window and send one bounded SFTP reply
++ * at a time. Run before select so queued replies wake the socket writer. */
++static void sftp_channel_io(struct Channel *channel) {
++	while (ses.dataallowed && !channel->sent_close &&
++			ses.writequeue_len <= 2*TRANS_MAX_PAYLOAD_LEN) {
++		const unsigned char *output;
++		size_t size = osplay_sftp_output(channel->sftp, &output);
++		if (size) {
++			size = MIN(size, channel->transwindow);
++			size = MIN(size, channel->transmaxpacket);
++			size = MIN(size, ses.writepayload->size - 9);
++			if (!size) break;
++			CHECKCLEARTOWRITE();
++			buf_putbyte(ses.writepayload, SSH_MSG_CHANNEL_DATA);
++			buf_putint(ses.writepayload, channel->remotechan);
++			buf_putstring(ses.writepayload, output, size);
++			channel->transwindow -= size;
++			osplay_sftp_sent(channel->sftp, size);
++			encrypt_packet();
++		} else {
++			unsigned char *p1, *p2;
++			unsigned int len1, len2;
++			cbuf_readptrs(channel->writebuf, &p1, &len1, &p2, &len2);
++			if (!len1) break;
++			size = osplay_sftp_feed(channel->sftp, p1, len1);
++			if (!size) break;
++			cbuf_incrread(channel->writebuf, size);
++			channel->recvdonelen += size;
++		}
++	}
++	if (ses.dataallowed && !channel->sent_close &&
++		channel->recvdonelen >= RECV_WINDOWEXTEND) {
++		send_msg_channel_window_adjust(channel, channel->recvdonelen);
++		channel->recvwindow += channel->recvdonelen;
++		channel->recvdonelen = 0;
++	}
++}
++#endif
++
+ /* Set the file descriptors for the main select in session.c
+  * This avoid channels which don't have any window available, are closed, etc*/
+@@ -552,5 +618,13 @@ void setchannelfds(fd_set *readfds, fd_set *writefds, int allow_reads) {
+ 		}
+
+-		/* Stuff to put over the wire.
++#if DROPBEAR_OSPLAY_SFTP && DROPBEAR_SERVER
++		if (channel->sftp) {
++			sftp_channel_io(channel);
++			check_close(channel);
++			continue;
++		}
++#endif
++
++		/* Stuff to put over the wire.
+ 		Avoid queueing data to send if we're in the middle of a
+ 		key re-exchange (!dataallowed), but still read from the
+@@ -630,4 +704,7 @@ static void remove_channel(struct Channel * channel) {
+ 	cbuf_free(channel->writebuf);
+ 	channel->writebuf = NULL;
++#if DROPBEAR_OSPLAY_SFTP && DROPBEAR_SERVER
++	osplay_sftp_free(channel->sftp);
++#endif
+
+ 	if (channel->extrabuf) {
+@@ -794,4 +871,9 @@ void common_recv_msg_channel_data(struct Channel *channel, int fd,
+ 	unsigned int consumed;
+ 	int res;
++#if DROPBEAR_OSPLAY_SFTP && DROPBEAR_SERVER
++	const int in_process = channel->sftp && cbuf == channel->writebuf && !channel->sent_close;
++#else
++	const int in_process = 0;
++#endif
+
+ 	TRACE(("enter recv_msg_channel_data"))
+@@ -801,5 +883,5 @@ void common_recv_msg_channel_data(struct Channel *channel, int fd,
+ 	}
+
+-	if (fd < 0 || !cbuf) {
++	if ((fd < 0 && !in_process) || !cbuf) {
+ 		/* If we have encountered failed write, the far side might still
+ 		 * be sending data without having yet received our close notification.
+@@ -816,5 +898,5 @@ void common_recv_msg_channel_data(struct Channel *channel, int fd,
+ 	 * lead to corrupted file transfers etc (chunks missed etc). It's better to
+ 	 * just die horribly */
+-	if (datalen > maxdata) {
++	if (datalen > maxdata || datalen > channel->recvwindow) {
+ 		dropbear_exit("Oversized packet");
+ 	}
+@@ -825,6 +907,7 @@ void common_recv_msg_channel_data(struct Channel *channel, int fd,
+
+ 	/* Attempt to write the data immediately without having to put it in the circular buffer */
+-	consumed = datalen;
+-	res = writechannel(channel, fd, cbuf, buf_getptr(ses.payload, datalen), &consumed);
++	consumed = in_process ? 0 : datalen;
++	res = in_process ? DROPBEAR_SUCCESS :
++		writechannel(channel, fd, cbuf, buf_getptr(ses.payload, datalen), &consumed);
+
+ 	datalen -= consumed;
+diff --git a/src/svr-chansession.c b/src/svr-chansession.c
+index 725bd9e..64495d3 100644
+--- a/src/svr-chansession.c
++++ b/src/svr-chansession.c
+@@ -38,4 +38,7 @@
+ #include "runopts.h"
+ #include "auth.h"
++#if DROPBEAR_OSPLAY_SFTP
++#include "osplay-sftp.h"
++#endif
+
+ /* Handles sessions (either shells or programs) requested by the client */
+@@ -394,4 +397,7 @@ static void chansessionrequest(struct Channel *channel) {
+ 	dropbear_assert(chansess != NULL);
+ 	TRACE(("type is %s", type))
++#if DROPBEAR_OSPLAY_SFTP
++	if (channel->sftp) goto out;
++#endif
+
+ 	if (strcmp(type, "window-change") == 0) {
+@@ -712,4 +718,19 @@ static int sessioncommand(struct Channel *channel, struct ChanSess *chansess,
+ 		}
+ 		if (issubsys) {
++#if DROPBEAR_OSPLAY_SFTP
++			if (cmdlen == 4 && memcmp(chansess->cmd, "sftp", 4) == 0) {
++				m_free(chansess->cmd);
++				/* Never bypass a forced command or reuse a PTY. */
++				if (svr_opts.forced_command || svr_pubkey_has_forced_command() ||
++					chansess->term || channel->recv_eof)
++					return DROPBEAR_FAILURE;
++				svr_switch_user();
++				channel->sftp = osplay_sftp_new(ses.authstate.pw_dir);
++				if (!channel->sftp) return DROPBEAR_FAILURE;
++				channel->prio = DROPBEAR_PRIO_NORMAL;
++				update_channel_prio();
++				return DROPBEAR_SUCCESS;
++			}
++#endif
+ #if DROPBEAR_SFTPSERVER
+ 			if ((cmdlen == 4) && strncmp(chansess->cmd, "sftp", 4) == 0) {

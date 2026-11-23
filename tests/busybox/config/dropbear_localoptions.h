@@ -8,6 +8,7 @@
 #define DROPBEAR_SVR_REMOTESTREAMFWD 0
 #define DROPBEAR_SVR_AGENTFWD 0
 #define DROPBEAR_SFTPSERVER 0
+#define DROPBEAR_OSPLAY_SFTP 1
 #define DROPBEAR_REEXEC 0
 
 /* Keep the cycle-accurate test server small. The image and authorized key are
@@ -27,11 +28,11 @@
 #define DROPBEAR_ED25519 1
 #define DROPBEAR_DELAY_HOSTKEY 0
 
-/* Test-only cleartext SSH transport for the cycle-accurate simulator. SSH host
- * and user-authentication state machines remain enabled, but this profile has
- * no cryptographic authentication, confidentiality, or packet MAC; it is
- * deliberately unsuitable outside an isolated test link. */
+/* Test-only cleartext SSH for the cycle-accurate simulator. The patched
+ * client explicitly selects cryptless with -c none. It has no cryptographic
+ * authentication, confidentiality, or packet MAC. Use only on isolated links. */
 #define DROPBEAR_NONE_CIPHER 1
+#define DROPBEAR_OSPLAY_CRYPTLESS 1
 
 /* Static glibc cannot resolve /etc/passwd through NSS in the freestanding
  * OSplay image.  This fixed test appliance has exactly one login account, so

@@ -39,6 +39,8 @@ DROPBEAR_SOURCE := $(BUILD)/dropbear-source
 DROPBEAR := $(DROPBEAR_SOURCE)/dropbear
 DROPBEAR_CONFIG := config/dropbear_localoptions.h
 DROPBEAR_PATCH := patches/dropbear-osplay.patch
+DROPBEAR_SFTP := patches/dropbear-sftp.patch patches/dropbear-cryptless.patch \
+	sftp/osplay-sftp.c sftp/osplay-sftp.h
 DROPBEAR_ADDRESS := $(if $(filter 64,$(OSPLAY_USER_XLEN)),0x41400000,0x81400000)
 DROPBEAR_HOST_OUT := $(BUILD)/dropbear-host
 DROPBEAR_HOST_STAMP := $(DROPBEAR_HOST_OUT)/.built
@@ -126,7 +128,7 @@ $(DROPBEAR_SOURCE)/.source-ready: download_dropbear.sh
 		$(DROPBEAR_SHA256)
 
 $(DROPBEAR): Makefile $(DROPBEAR_SOURCE)/.source-ready $(DROPBEAR_CONFIG) \
-		$(DROPBEAR_PATCH) \
+		$(DROPBEAR_PATCH) $(DROPBEAR_SFTP) \
 		build_dropbear.sh
 	./build_dropbear.sh $(DROPBEAR_SOURCE) $(RISCV_LINUX_PREFIX) \
 		$(DROPBEAR_ADDRESS) $(LLVM_READELF) $(JOBS) $(DROPBEAR_CONFIG) \

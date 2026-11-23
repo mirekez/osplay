@@ -13,6 +13,7 @@ llvm_readelf="$4"
 jobs="$5"
 options="$6"
 patch_file="$7"
+here="$(cd "$(dirname "$0")" && pwd)"
 host="$(basename "$cross_prefix")"
 host="${host%-}"
 
@@ -26,14 +27,17 @@ fi
 rm -rf "$source_tree/obj"
 install -m 0644 "$options" "$source_tree/localoptions.h"
 # The release preserves trailing spaces in a few signature-call lines.
-if patch -l -d "$source_tree" -p1 --forward --dry-run \
-    <"$patch_file" >/dev/null 2>&1; then
-  patch -l -d "$source_tree" -p1 <"$patch_file"
-elif ! patch -l -d "$source_tree" -p1 --reverse --dry-run \
-    <"$patch_file" >/dev/null 2>&1; then
-  echo "Dropbear OSplay patch does not apply cleanly" >&2
-  exit 1
-fi
+for source_patch in "$patch_file" "$here"/patches/dropbear-{sftp,cryptless}.patch; do
+  if patch -l -d "$source_tree" -p1 --forward --dry-run \
+      <"$source_patch" >/dev/null 2>&1; then
+    patch -l -d "$source_tree" -p1 <"$source_patch"
+  elif ! patch -l -d "$source_tree" -p1 --reverse --dry-run \
+      <"$source_patch" >/dev/null 2>&1; then
+    echo "Dropbear patch does not apply cleanly: $source_patch" >&2
+    exit 1
+  fi
+done
+install -m 0644 "$here"/sftp/osplay-sftp.{c,h} "$source_tree/src/"
 
 # SSH key exchange is CPU-bound under Tribe's cycle-level native C++ model.
 # Optimizing this guest code for size makes Curve25519 take many times longer
