@@ -392,8 +392,8 @@ void disable_interrupt_controllers() {
   asm volatile("csrw pmpaddr1, %0" : : "r"(dma));
   asm volatile("csrw pmpaddr2, %0" : : "r"(u64(user_begin) >> 2));
   asm volatile("csrw pmpaddr3, %0" : : "r"(u64(user_end) >> 2));
-  // Deny the kernel/rootfs/weights gap, then allow only the high model heap.
-  asm volatile("csrw pmpaddr4, %0" : : "r"(u64(abi::venus::heap_begin) >> 2));
+  // Deny the kernel/rootfs gap, then allow the archive and model heap.
+  asm volatile("csrw pmpaddr4, %0" : : "r"(u64(abi::venus::user_arena_begin) >> 2));
   asm volatile("csrw pmpaddr5, %0" : : "r"(u64(abi::venus::heap_end) >> 2));
   constexpr u64 config = 0x00000b080f001b1bULL;
   asm volatile("csrw pmpcfg0, %0" : : "r"(config));

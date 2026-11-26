@@ -42,7 +42,7 @@ inline constexpr u32 user_stack_top = 0x81fff000;
 struct UserMemory {
   [[nodiscard]] constexpr bool contains(uword address, uword size) const {
     return UserRange{user_begin, user_end}.contains(address, size) ||
-           UserRange{abi::venus::heap_begin, abi::venus::heap_end}.contains(address, size);
+           UserRange{abi::venus::user_arena_begin, abi::venus::heap_end}.contains(address, size);
   }
   [[nodiscard]] constexpr bool aligned(uword address, uword alignment) const {
     return UserRange{user_begin, user_end}.aligned(address, alignment);

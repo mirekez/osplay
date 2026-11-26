@@ -4717,6 +4717,11 @@ static_assert(sizeof(Winsize) == sizeof(process_model::WindowSize));
     if (!user_memory.contains(address, rounded)) {
       return error(Errno::no_memory);
     }
+#ifdef OSPLAY_VENUS_ARCHIVE
+    if (address >= abi::venus::archive_begin && address < abi::venus::archive_end) {
+      return error(Errno::no_memory);
+    }
+#endif
 #ifndef OSPLAY_RV64
     return static_cast<iword>(address);
 #endif
@@ -4835,6 +4840,13 @@ void deliver_pending_signal(TrapFrame& frame) {
 
 iword dispatch_syscall(TrapFrame& frame) {
 #ifdef OSPLAY_VENUS
+#ifdef OSPLAY_VENUS_ARCHIVE
+  if (frame.x[17] == abi::venus::archive_memory) {
+    if (frame.x[10] > abi::venus::archive_end - abi::venus::archive_begin)
+      return error(Errno::no_memory);
+    return static_cast<iword>(abi::venus::archive_begin);
+  }
+#endif
 #if defined(OSPLAY_PRELOADED_MEMORY) && defined(OSPLAY_RV64)
   if (frame.x[17] == abi::venus::initialized_memory) {
     const auto* header = reinterpret_cast<const abi::venus::InitializedMemory*>(
